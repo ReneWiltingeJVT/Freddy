@@ -3,7 +3,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ConversationList } from './ConversationList';
 import { ChatMessageList } from './ChatMessageList';
 import { ChatInput } from './ChatInput';
-import { useMessages, useSendMessage, useCreateConversation } from '../../hooks/useChat';
+import { useMessages, useSendMessage, useCreateConversation, useDeleteConversation } from '../../hooks/useChat';
+import type { MessageDto } from '../../types/chat';
 import { sendMessage as apiSendMessage } from '../../lib/api';
 
 export function ChatPage() {
@@ -13,13 +14,29 @@ export function ChatPage() {
   const { data: messages = [], isLoading: messagesLoading } = useMessages(conversationId);
   const sendMessageMutation = useSendMessage(conversationId ?? '');
   const createConversationMutation = useCreateConversation();
+  const deleteConversationMutation = useDeleteConversation();
 
   async function handleSendMessage(content: string) {
     if (!conversationId) {
+      // Create a new conversation, navigate, then send message with optimistic UI
       const conversation = await createConversationMutation.mutateAsync(undefined);
       navigate(`/chat/${conversation.id}`);
+
+      // Optimistically show user message while waiting for AI
+      const optimisticMessage: MessageDto = {
+        id: `optimistic-${Date.now()}`,
+        role: 'user',
+        content,
+        createdAt: new Date().toISOString(),
+      };
+      queryClient.setQueryData<MessageDto[]>(
+        ['messages', conversation.id],
+        [optimisticMessage],
+      );
+
       await apiSendMessage(conversation.id, content);
       await queryClient.invalidateQueries({ queryKey: ['messages', conversation.id] });
+      await queryClient.invalidateQueries({ queryKey: ['conversations'] });
       return;
     }
     await sendMessageMutation.mutateAsync(content);
@@ -31,6 +48,13 @@ export function ChatPage() {
 
   function handleSelectConversation(id: string) {
     navigate(`/chat/${id}`);
+  }
+
+  async function handleDeleteConversation(id: string) {
+    await deleteConversationMutation.mutateAsync(id);
+    if (conversationId === id) {
+      navigate('/chat');
+    }
   }
 
   return (
@@ -54,6 +78,7 @@ export function ChatPage() {
         <ConversationList
           selectedId={conversationId}
           onSelect={handleSelectConversation}
+          onDelete={handleDeleteConversation}
         />
       </aside>
 

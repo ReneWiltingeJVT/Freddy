@@ -90,4 +90,22 @@ public sealed class ChatController(IMediator mediator) : ControllerBase
                 result.Value)
             : result.ToActionResult();
     }
+
+    /// <summary>
+    /// Deletes a conversation and all its messages.
+    /// </summary>
+    [HttpDelete("conversations/{conversationId:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteConversationAsync(
+        Guid conversationId,
+        CancellationToken cancellationToken)
+    {
+        Result<bool> result = await mediator.Send(
+            new DeleteConversationCommand(conversationId), cancellationToken);
+
+        return result.IsSuccess
+            ? NoContent()
+            : result.ToActionResult();
+    }
 }

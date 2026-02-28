@@ -13,4 +13,6 @@ public interface IConversationRepository
     Task<Message> AddMessageAsync(Message message, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<Message>> GetMessagesAsync(Guid conversationId, CancellationToken cancellationToken);
+
+    Task DeleteAsync(Guid conversationId, CancellationToken cancellationToken);
 }

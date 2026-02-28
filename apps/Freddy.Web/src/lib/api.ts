@@ -13,6 +13,7 @@ function setToken(token: string): void {
 
 const api = ky.create({
   prefixUrl: '/api/v1',
+  timeout: 120_000,
   hooks: {
     beforeRequest: [
       (request) => {
@@ -50,4 +51,9 @@ export async function getMessages(conversationId: string): Promise<MessageDto[]>
 export async function sendMessage(conversationId: string, content: string): Promise<MessageDto> {
   await ensureAuthToken();
   return api.post(`chat/conversations/${conversationId}/messages`, { json: { content } }).json<MessageDto>();
+}
+
+export async function deleteConversation(conversationId: string): Promise<void> {
+  await ensureAuthToken();
+  await api.delete(`chat/conversations/${conversationId}`);
 }
