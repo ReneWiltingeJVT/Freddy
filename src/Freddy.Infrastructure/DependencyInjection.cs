@@ -19,6 +19,7 @@ public static class DependencyInjection
 
         // Repositories
         services.AddScoped<IConversationRepository, ConversationRepository>();
+        services.AddScoped<IPackageRepository, Persistence.Repositories.PackageRepository>();
 
         // AI — Ollama via Semantic Kernel
         string aiEndpoint = configuration["AI:Endpoint"] ?? "http://localhost:11434";
@@ -35,6 +36,7 @@ public static class DependencyInjection
 #pragma warning restore SKEXP0070
 
         services.AddScoped<IChatService, AI.OllamaChatService>();
+        services.AddScoped<IPackageRouter, AI.OllamaPackageRouter>();
 
         return services;
     }

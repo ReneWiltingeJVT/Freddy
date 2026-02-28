@@ -9,6 +9,8 @@ public sealed class FreddyDbContext(DbContextOptions<FreddyDbContext> options) :
 
     public DbSet<Message> Messages => Set<Message>();
 
+    public DbSet<Package> Packages => Set<Package>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder) =>
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(FreddyDbContext).Assembly);
 }
