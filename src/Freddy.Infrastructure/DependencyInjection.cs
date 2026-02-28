@@ -20,6 +20,7 @@ public static class DependencyInjection
         // Repositories
         services.AddScoped<IConversationRepository, ConversationRepository>();
         services.AddScoped<IPackageRepository, Persistence.Repositories.PackageRepository>();
+        services.AddScoped<IDocumentRepository, Persistence.Repositories.DocumentRepository>();
 
         // AI — Ollama via Semantic Kernel
         string aiEndpoint = configuration["AI:Endpoint"] ?? "http://localhost:11434";

@@ -8,5 +8,13 @@ public interface IPackageRepository
 
     Task<Package?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<Package>> GetAllActiveAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<Package>> GetAllPublishedAsync(CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<Package>> GetAllAsync(bool? isPublished, string? search, CancellationToken cancellationToken);
+
+    Task<Package> CreateAsync(Package package, CancellationToken cancellationToken);
+
+    Task<Package> UpdateAsync(Package package, CancellationToken cancellationToken);
+
+    Task DeleteAsync(Package package, CancellationToken cancellationToken);
 }

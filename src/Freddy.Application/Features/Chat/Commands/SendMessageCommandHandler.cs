@@ -36,10 +36,10 @@ public sealed class SendMessageCommandHandler(
         };
         _ = await conversationRepository.AddMessageAsync(userMessage, cancellationToken).ConfigureAwait(false);
 
-        // 2. Get all active packages as routing candidates
-        IReadOnlyList<Package> packages = await packageRepository.GetAllActiveAsync(cancellationToken).ConfigureAwait(false);
+        // 2. Get all published packages as routing candidates
+        IReadOnlyList<Package> packages = await packageRepository.GetAllPublishedAsync(cancellationToken).ConfigureAwait(false);
         PackageCandidate[] candidates = [.. packages
-            .Select(p => new PackageCandidate(p.Id, p.Name, p.Description)),];
+            .Select(p => new PackageCandidate(p.Id, p.Title, p.Description)),];
 
         // 3. Route via Ollama (JSON classifier)
         PackageRouterResult routerResult = await packageRouter.RouteAsync(
@@ -91,14 +91,14 @@ public sealed class SendMessageCommandHandler(
         // Needs confirmation — medium confidence
         if (routerResult.NeedsConfirmation || routerResult.Confidence < HighConfidenceThreshold)
         {
-            logger.LogInformation("Package match needs confirmation: {PackageName} (confidence: {Confidence:F2})", package.Name, routerResult.Confidence);
-            return $"Ik denk dat je vraag gaat over **{package.Name}**. Klopt dat?\n\n" +
+            logger.LogInformation("Package match needs confirmation: {PackageName} (confidence: {Confidence:F2})", package.Title, routerResult.Confidence);
+            return $"Ik denk dat je vraag gaat over **{package.Title}**. Klopt dat?\n\n" +
                    $"_{package.Description}_";
         }
 
         // High confidence — return package content directly
-        logger.LogInformation("High confidence match: {PackageName} (confidence: {Confidence:F2})", package.Name, routerResult.Confidence);
-        return $"**{package.Name}**\n\n{package.Content}";
+        logger.LogInformation("High confidence match: {PackageName} (confidence: {Confidence:F2})", package.Title, routerResult.Confidence);
+        return $"**{package.Title}**\n\n{package.Content}";
     }
 
     private static string MapRole(MessageRole role) => role switch

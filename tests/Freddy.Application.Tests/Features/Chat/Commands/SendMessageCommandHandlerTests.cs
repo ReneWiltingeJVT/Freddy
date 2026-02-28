@@ -43,17 +43,17 @@ public sealed class SendMessageCommandHandlerTests
         var package = new Package
         {
             Id = packageId,
-            Name = "Voedselbank",
+            Title = "Voedselbank",
             Description = "Protocol voor voedselbankpakketten",
             Content = "Stap 1: Check voorraad.",
-            IsActive = true,
+            IsPublished = true,
         };
 
         _conversationRepository.GetByIdAsync(conversationId, Arg.Any<CancellationToken>())
             .Returns(conversation);
         _conversationRepository.AddMessageAsync(Arg.Any<Message>(), Arg.Any<CancellationToken>())
             .Returns(callInfo => callInfo.Arg<Message>());
-        _packageRepository.GetAllActiveAsync(Arg.Any<CancellationToken>())
+        _packageRepository.GetAllPublishedAsync(Arg.Any<CancellationToken>())
             .Returns([package]);
         _packageRepository.GetByIdAsync(packageId, Arg.Any<CancellationToken>())
             .Returns(package);
@@ -113,7 +113,7 @@ public sealed class SendMessageCommandHandlerTests
             .Returns(conversation);
         _conversationRepository.AddMessageAsync(Arg.Any<Message>(), Arg.Any<CancellationToken>())
             .Returns(callInfo => callInfo.Arg<Message>());
-        _packageRepository.GetAllActiveAsync(Arg.Any<CancellationToken>())
+        _packageRepository.GetAllPublishedAsync(Arg.Any<CancellationToken>())
             .Returns([]);
         _packageRouter.RouteAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<PackageCandidate>>(), Arg.Any<CancellationToken>())
             .Returns(new PackageRouterResult
@@ -151,17 +151,17 @@ public sealed class SendMessageCommandHandlerTests
         var package = new Package
         {
             Id = packageId,
-            Name = "Voedselbank",
+            Title = "Voedselbank",
             Description = "Protocol voor voedselbankpakketten",
             Content = "Stap 1: Check voorraad.",
-            IsActive = true,
+            IsPublished = true,
         };
 
         _conversationRepository.GetByIdAsync(conversationId, Arg.Any<CancellationToken>())
             .Returns(conversation);
         _conversationRepository.AddMessageAsync(Arg.Any<Message>(), Arg.Any<CancellationToken>())
             .Returns(callInfo => callInfo.Arg<Message>());
-        _packageRepository.GetAllActiveAsync(Arg.Any<CancellationToken>())
+        _packageRepository.GetAllPublishedAsync(Arg.Any<CancellationToken>())
             .Returns([package]);
         _packageRepository.GetByIdAsync(packageId, Arg.Any<CancellationToken>())
             .Returns(package);
@@ -204,7 +204,7 @@ public sealed class SendMessageCommandHandlerTests
             .Returns(conversation);
         _conversationRepository.AddMessageAsync(Arg.Any<Message>(), Arg.Any<CancellationToken>())
             .Returns(callInfo => callInfo.Arg<Message>());
-        _packageRepository.GetAllActiveAsync(Arg.Any<CancellationToken>())
+        _packageRepository.GetAllPublishedAsync(Arg.Any<CancellationToken>())
             .Returns([]);
         _packageRepository.GetByIdAsync(fakePackageId, Arg.Any<CancellationToken>())
             .Returns((Package?)null);

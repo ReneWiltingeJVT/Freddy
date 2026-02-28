@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Freddy.Application\Freddy.Application.csproj" />
+    <ProjectReference Include="..\..\src\Freddy.Api\Freddy.Api.csproj" />
   </ItemGroup>
 
   <ItemGroup>

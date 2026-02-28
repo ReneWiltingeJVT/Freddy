@@ -17,8 +17,8 @@ public sealed class PackageConfiguration : IEntityTypeConfiguration<Package>
         builder.Property(p => p.Id)
             .HasColumnName("id");
 
-        builder.Property(p => p.Name)
-            .HasColumnName("name")
+        builder.Property(p => p.Title)
+            .HasColumnName("title")
             .HasMaxLength(200)
             .IsRequired();
 
@@ -31,13 +31,21 @@ public sealed class PackageConfiguration : IEntityTypeConfiguration<Package>
             .HasColumnName("content")
             .IsRequired();
 
-        builder.Property(p => p.Keywords)
-            .HasColumnName("keywords")
+        builder.Property(p => p.Tags)
+            .HasColumnName("tags")
             .HasColumnType("text[]");
 
-        builder.Property(p => p.IsActive)
-            .HasColumnName("is_active")
-            .HasDefaultValue(value: true);
+        builder.Property(p => p.Synonyms)
+            .HasColumnName("synonyms")
+            .HasColumnType("text[]");
+
+        builder.Property(p => p.IsPublished)
+            .HasColumnName("is_published")
+            .HasDefaultValue(value: false);
+
+        builder.Property(p => p.RequiresConfirmation)
+            .HasColumnName("requires_confirmation")
+            .HasDefaultValue(value: false);
 
         builder.Property(p => p.CreatedAt)
             .HasColumnName("created_at")
@@ -47,11 +55,20 @@ public sealed class PackageConfiguration : IEntityTypeConfiguration<Package>
             .HasColumnName("updated_at")
             .IsRequired();
 
-        builder.HasIndex(p => p.IsActive)
-            .HasDatabaseName("ix_packages_is_active");
+        builder.HasIndex(p => p.IsPublished)
+            .HasDatabaseName("ix_packages_is_published");
 
-        builder.HasIndex(p => p.Keywords)
+        builder.HasIndex(p => p.Tags)
             .HasMethod("gin")
-            .HasDatabaseName("ix_packages_keywords");
+            .HasDatabaseName("ix_packages_tags");
+
+        builder.HasIndex(p => p.Synonyms)
+            .HasMethod("gin")
+            .HasDatabaseName("ix_packages_synonyms");
+
+        builder.HasMany(p => p.Documents)
+            .WithOne(d => d.Package)
+            .HasForeignKey(d => d.PackageId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

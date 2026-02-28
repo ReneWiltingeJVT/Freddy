@@ -92,6 +92,7 @@ try
 
     app.UseSerilogRequestLogging();
     app.UseCors();
+    app.UseMiddleware<AdminApiKeyMiddleware>();
     app.UseAuthentication();
     app.UseAuthorization();
     app.MapControllers();

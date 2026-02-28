@@ -14,11 +14,12 @@ public sealed class PackageRepository(FreddyDbContext dbContext) : IPackageRepos
 
         return await dbContext.Packages
             .AsNoTracking()
-            .Where(p => p.IsActive &&
-                (EF.Functions.ILike(p.Name, $"%{normalizedQuery}%") ||
+            .Where(p => p.IsPublished &&
+                (EF.Functions.ILike(p.Title, $"%{normalizedQuery}%") ||
                  EF.Functions.ILike(p.Description, $"%{normalizedQuery}%") ||
-                 p.Keywords.Any(k => EF.Functions.ILike(k, $"%{normalizedQuery}%"))))
-            .OrderBy(p => p.Name)
+                 p.Tags.Any(k => EF.Functions.ILike(k, $"%{normalizedQuery}%")) ||
+                 p.Synonyms.Any(s => EF.Functions.ILike(s, $"%{normalizedQuery}%"))))
+            .OrderBy(p => p.Title)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
     }
@@ -31,13 +32,55 @@ public sealed class PackageRepository(FreddyDbContext dbContext) : IPackageRepos
             .ConfigureAwait(false);
     }
 
-    public async Task<IReadOnlyList<Package>> GetAllActiveAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<Package>> GetAllPublishedAsync(CancellationToken cancellationToken)
     {
         return await dbContext.Packages
             .AsNoTracking()
-            .Where(p => p.IsActive)
-            .OrderBy(p => p.Name)
+            .Where(p => p.IsPublished)
+            .OrderBy(p => p.Title)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<Package>> GetAllAsync(bool? isPublished, string? search, CancellationToken cancellationToken)
+    {
+        IQueryable<Package> query = dbContext.Packages.AsNoTracking();
+
+        if (isPublished.HasValue)
+        {
+            query = query.Where(p => p.IsPublished == isPublished.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            query = query.Where(p =>
+                EF.Functions.ILike(p.Title, $"%{search}%") ||
+                EF.Functions.ILike(p.Description, $"%{search}%"));
+        }
+
+        return await query
+            .OrderBy(p => p.Title)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<Package> CreateAsync(Package package, CancellationToken cancellationToken)
+    {
+        dbContext.Packages.Add(package);
+        await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return package;
+    }
+
+    public async Task<Package> UpdateAsync(Package package, CancellationToken cancellationToken)
+    {
+        dbContext.Packages.Update(package);
+        await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return package;
+    }
+
+    public async Task DeleteAsync(Package package, CancellationToken cancellationToken)
+    {
+        dbContext.Packages.Remove(package);
+        await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 }

@@ -95,7 +95,7 @@ public sealed class OllamaPackageRouter(
     private static string FormatCandidates(IReadOnlyList<PackageCandidate> candidates)
     {
         return string.Join("\n", candidates.Select(c =>
-            $"- ID: {c.Id} | Naam: {c.Name} | Beschrijving: {c.Description}"));
+            $"- ID: {c.Id} | Naam: {c.Title} | Beschrijving: {c.Description}"));
     }
 
     private PackageRouterResult ParseRouterResponse(string rawJson, IReadOnlyList<PackageCandidate> candidates)
