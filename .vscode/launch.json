@@ -1,0 +1,28 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Freddy API",
+      "type": "dotnet",
+      "request": "launch",
+      "projectPath": "${workspaceFolder}/src/Freddy.Api/Freddy.Api.csproj",
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    },
+    {
+      "name": "Freddy Web (React)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/apps/Freddy.Web/src",
+      "preLaunchTask": "frontend-dev"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Full Stack (API + Web)",
+      "configurations": ["Freddy API", "Freddy Web (React)"]
+    }
+  ]
+}

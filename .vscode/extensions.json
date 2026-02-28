@@ -1,0 +1,22 @@
+{
+  "recommendations": [
+    "ms-dotnettools.csdevkit",
+    "ms-dotnettools.csharp",
+    "ms-dotnettools.dotnet-interactive-vscode",
+    "editorconfig.editorconfig",
+    "esbenp.prettier-vscode",
+    "DavidAnson.vscode-markdownlint",
+    "redhat.vscode-yaml",
+    "eamodio.gitlens",
+    "ms-azuretools.vscode-docker",
+    "humao.rest-client",
+    "bierner.markdown-mermaid",
+    "yzhang.markdown-all-in-one",
+    "GitHub.copilot",
+    "GitHub.copilot-chat",
+    "ckolkman.vscode-postgres",
+    "streetsidesoftware.code-spell-checker",
+    "streetsidesoftware.code-spell-checker-dutch",
+    "gruntfuggly.todo-tree"
+  ]
+}

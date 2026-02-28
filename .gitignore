@@ -1,0 +1,69 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+## Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+build/
+bld/
+
+## NuGet
+*.nupkg
+**/packages/*
+!**/packages/build/
+project.lock.json
+project.fragment.lock.json
+
+## Visual Studio
+.vs/
+*.csproj.user
+*.dbmdl
+*.jfm
+launchSettings.json
+
+## Rider
+.idea/
+*.sln.iml
+
+## User-specific
+*.rsuser
+*.DotSettings.user
+
+## Test results
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.trx
+coverage/
+*.coveragexml
+
+## OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+## Docker
+docker-compose.override.yml
+
+## Secrets
+appsettings.Development.json
+appsettings.*.local.json
+*.pfx
+*.key
+
+## Logs
+logs/
+*.log
+
+## Ollama models (too large for git)
+models/
+
+## Seq data
+seq-data/

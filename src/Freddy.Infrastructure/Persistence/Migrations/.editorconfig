@@ -1,0 +1,3 @@
+# Auto-generated EF Core migrations — suppress style/analyzer warnings
+[*.cs]
+generated_code = true

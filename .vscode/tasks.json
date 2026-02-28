@@ -1,0 +1,81 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build",
+      "command": "dotnet",
+      "type": "process",
+      "args": ["build", "${workspaceFolder}/Freddy.sln", "--configuration", "Debug"],
+      "problemMatcher": "$msCompile",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "test",
+      "command": "dotnet",
+      "type": "process",
+      "args": ["test", "${workspaceFolder}/Freddy.sln", "--configuration", "Debug", "--no-build"],
+      "problemMatcher": "$msCompile",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "format-check",
+      "command": "dotnet",
+      "type": "process",
+      "args": ["format", "${workspaceFolder}/Freddy.sln", "--verify-no-changes", "--verbosity", "normal"],
+      "problemMatcher": []
+    },
+    {
+      "label": "format-fix",
+      "command": "dotnet",
+      "type": "process",
+      "args": ["format", "${workspaceFolder}/Freddy.sln", "--verbosity", "normal"],
+      "problemMatcher": []
+    },
+    {
+      "label": "docker-up",
+      "type": "shell",
+      "command": "docker compose -f infra/docker-compose.yml up -d",
+      "problemMatcher": []
+    },
+    {
+      "label": "docker-down",
+      "type": "shell",
+      "command": "docker compose -f infra/docker-compose.yml down",
+      "problemMatcher": []
+    },
+    {
+      "label": "frontend-dev",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": {
+        "cwd": "${workspaceFolder}/apps/Freddy.Web"
+      },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "frontend-build",
+      "type": "shell",
+      "command": "npm run build",
+      "options": {
+        "cwd": "${workspaceFolder}/apps/Freddy.Web"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "frontend-lint",
+      "type": "shell",
+      "command": "npm run lint",
+      "options": {
+        "cwd": "${workspaceFolder}/apps/Freddy.Web"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

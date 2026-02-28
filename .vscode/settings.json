@@ -1,0 +1,82 @@
+{
+  // Editor
+  "editor.formatOnSave": true,
+  "editor.formatOnPaste": false,
+  "editor.rulers": [120],
+  "editor.bracketPairColorization.enabled": true,
+  "editor.guides.bracketPairs": "active",
+  "editor.minimap.enabled": false,
+
+  // Files
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "files.trimFinalNewlines": true,
+  "files.encoding": "utf8",
+  "files.eol": "\n",
+  "files.exclude": {
+    "**/bin": true,
+    "**/obj": true,
+    "**/.vs": true,
+    "**/node_modules": true
+  },
+
+  // C#
+  "dotnet.defaultSolution": "Freddy.sln",
+  "csharp.format.enable": true,
+  "omnisharp.enableEditorConfigSupport": true,
+  "omnisharp.enableRoslynAnalyzers": true,
+  "omnisharp.organizeImportsOnFormat": true,
+
+  // Markdown
+  "[markdown]": {
+    "editor.wordWrap": "on",
+    "editor.trimAutoWhitespace": false,
+    "files.trimTrailingWhitespace": false,
+    "editor.defaultFormatter": "DavidAnson.vscode-markdownlint"
+  },
+
+  // JSON
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.tabSize": 2
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.tabSize": 2
+  },
+
+  // YAML
+  "[yaml]": {
+    "editor.tabSize": 2,
+    "editor.defaultFormatter": "redhat.vscode-yaml"
+  },
+
+  // XML / csproj
+  "[xml]": {
+    "editor.tabSize": 2
+  },
+
+  // Search
+  "search.exclude": {
+    "**/bin": true,
+    "**/obj": true,
+    "**/.git": true
+  },
+
+  // Testing
+  "dotnet-test-explorer.testProjectPath": "tests/**/*.csproj",
+
+  // Terminal
+  "terminal.integrated.defaultProfile.windows": "PowerShell",
+
+  // Git
+  "git.autofetch": true,
+  "git.enableSmartCommit": true,
+
+  // Copilot
+  "github.copilot.enable": {
+    "*": true,
+    "markdown": true,
+    "yaml": true
+  }
+}

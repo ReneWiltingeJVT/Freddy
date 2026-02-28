@@ -1,0 +1,8 @@
+# Test project — relax some analyzer rules
+[*.cs]
+# Test methods use underscores by convention (MethodName_Scenario_Expected)
+dotnet_diagnostic.CA1707.severity = none
+# FluentAssertions and NSubstitute return values are intentionally unused
+dotnet_diagnostic.IDE0058.severity = none
+# Async test methods don't need Async suffix
+dotnet_naming_rule.async_methods_end_with_async.severity = none

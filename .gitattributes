@@ -1,0 +1,41 @@
+# Auto detect text files and normalise line endings
+* text=auto
+
+# C# source files
+*.cs text diff=csharp
+
+# Project files
+*.sln text eol=crlf
+*.csproj text eol=crlf
+*.props text eol=crlf
+*.targets text eol=crlf
+
+# Config
+*.json text
+*.yml text
+*.yaml text
+*.xml text
+*.config text
+
+# Docs
+*.md text diff=markdown
+*.txt text
+
+# Shell scripts must use LF
+*.sh text eol=lf
+
+# PowerShell
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
+
+# Docker
+Dockerfile text
+docker-compose*.yml text
+
+# Binary
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.docx binary
