@@ -13,5 +13,10 @@ public sealed record PackageRouterResult
 
     public string? Reason { get; init; }
 
+    /// <summary>
+    /// Indicates the AI service was unreachable (Ollama down, timeout, etc.).
+    /// </summary>
+    public bool IsServiceUnavailable { get; init; }
+
     public bool IsSuccessful => ChosenPackageId.HasValue && Confidence >= 0.6;
 }

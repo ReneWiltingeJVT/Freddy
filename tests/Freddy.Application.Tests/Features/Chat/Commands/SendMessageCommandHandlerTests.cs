@@ -14,6 +14,7 @@ public sealed class SendMessageCommandHandlerTests
 {
     private readonly IConversationRepository _conversationRepository = Substitute.For<IConversationRepository>();
     private readonly IPackageRepository _packageRepository = Substitute.For<IPackageRepository>();
+    private readonly IDocumentRepository _documentRepository = Substitute.For<IDocumentRepository>();
     private readonly IPackageRouter _packageRouter = Substitute.For<IPackageRouter>();
     private readonly SendMessageCommandHandler _handler;
 
@@ -22,6 +23,7 @@ public sealed class SendMessageCommandHandlerTests
         _handler = new SendMessageCommandHandler(
             _conversationRepository,
             _packageRepository,
+            _documentRepository,
             _packageRouter,
             NullLogger<SendMessageCommandHandler>.Instance);
     }
@@ -65,6 +67,8 @@ public sealed class SendMessageCommandHandlerTests
                 NeedsConfirmation = false,
                 Reason = "Duidelijke match",
             });
+        _documentRepository.GetByPackageIdAsync(packageId, Arg.Any<CancellationToken>())
+            .Returns([]);
 
         SendMessageCommand command = new(conversationId, "Hoe werkt de voedselbank?");
 
@@ -76,6 +80,111 @@ public sealed class SendMessageCommandHandlerTests
         result.Value!.Role.Should().Be("assistant");
         result.Value.Content.Should().Contain("Voedselbank");
         result.Value.Content.Should().Contain("Stap 1: Check voorraad.");
+    }
+
+    [Fact]
+    public async Task Handle_HighConfidenceMatch_IncludesDocumentLinks()
+    {
+        // Arrange
+        var conversationId = Guid.CreateVersion7();
+        var packageId = Guid.CreateVersion7();
+        var conversation = new Conversation
+        {
+            Id = conversationId,
+            UserId = Guid.CreateVersion7(),
+            Title = "Test",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        var package = new Package
+        {
+            Id = packageId,
+            Title = "Voedselbank",
+            Description = "Protocol voor voedselbankpakketten",
+            Content = "Stap 1: Check voorraad.",
+            IsPublished = true,
+        };
+
+        _conversationRepository.GetByIdAsync(conversationId, Arg.Any<CancellationToken>())
+            .Returns(conversation);
+        _conversationRepository.AddMessageAsync(Arg.Any<Message>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo => callInfo.Arg<Message>());
+        _packageRepository.GetAllPublishedAsync(Arg.Any<CancellationToken>())
+            .Returns([package]);
+        _packageRepository.GetByIdAsync(packageId, Arg.Any<CancellationToken>())
+            .Returns(package);
+        _packageRouter.RouteAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<PackageCandidate>>(), Arg.Any<CancellationToken>())
+            .Returns(new PackageRouterResult
+            {
+                ChosenPackageId = packageId,
+                Confidence = 0.9,
+                NeedsConfirmation = false,
+                Reason = "Duidelijke match",
+            });
+        _documentRepository.GetByPackageIdAsync(packageId, Arg.Any<CancellationToken>())
+            .Returns(
+            [
+                new Document
+                {
+                    Id = Guid.CreateVersion7(),
+                    PackageId = packageId,
+                    Name = "Informatiepakket",
+                    FileUrl = "/uploads/documents/info.pdf",
+                    Type = DocumentType.Pdf,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                },
+            ]);
+
+        SendMessageCommand command = new(conversationId, "Hoe werkt de voedselbank?");
+
+        // Act
+        Result<MessageDto> result = await _handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Content.Should().Contain("Documenten");
+        result.Value.Content.Should().Contain("Informatiepakket");
+    }
+
+    [Fact]
+    public async Task Handle_ServiceUnavailable_ReturnsErrorMessage()
+    {
+        // Arrange
+        var conversationId = Guid.CreateVersion7();
+        var conversation = new Conversation
+        {
+            Id = conversationId,
+            UserId = Guid.CreateVersion7(),
+            Title = "Test",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+
+        _conversationRepository.GetByIdAsync(conversationId, Arg.Any<CancellationToken>())
+            .Returns(conversation);
+        _conversationRepository.AddMessageAsync(Arg.Any<Message>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo => callInfo.Arg<Message>());
+        _packageRepository.GetAllPublishedAsync(Arg.Any<CancellationToken>())
+            .Returns([]);
+        _packageRouter.RouteAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<PackageCandidate>>(), Arg.Any<CancellationToken>())
+            .Returns(new PackageRouterResult
+            {
+                ChosenPackageId = null,
+                Confidence = 0.0,
+                IsServiceUnavailable = true,
+                NeedsConfirmation = false,
+                Reason = "AI-service is niet bereikbaar.",
+            });
+
+        SendMessageCommand command = new(conversationId, "Hoe werkt de voedselbank?");
+
+        // Act
+        Result<MessageDto> result = await _handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Content.Should().Contain("AI-service");
+        result.Value.Content.Should().Contain("niet beschikbaar");
     }
 
     [Fact]

@@ -10,6 +10,7 @@ namespace Freddy.Application.Features.Chat.Commands;
 public sealed class SendMessageCommandHandler(
     IConversationRepository conversationRepository,
     IPackageRepository packageRepository,
+    IDocumentRepository documentRepository,
     IPackageRouter packageRouter,
     ILogger<SendMessageCommandHandler> logger) : IRequestHandler<SendMessageCommand, Result<MessageDto>>
 {
@@ -72,6 +73,13 @@ public sealed class SendMessageCommandHandler(
 
     private async Task<string> BuildResponseAsync(PackageRouterResult routerResult, CancellationToken cancellationToken)
     {
+        // AI service is down — tell the user explicitly
+        if (routerResult.IsServiceUnavailable)
+        {
+            logger.LogWarning("AI service unavailable — returning service error to user");
+            return "Sorry, de AI-service is momenteel niet beschikbaar. Probeer het over enkele minuten opnieuw.";
+        }
+
         // No match — confidence too low
         if (!routerResult.IsSuccessful || routerResult.ChosenPackageId is null)
         {
@@ -96,9 +104,34 @@ public sealed class SendMessageCommandHandler(
                    $"_{package.Description}_";
         }
 
-        // High confidence — return package content directly
+        // High confidence — return package content + documents
         logger.LogInformation("High confidence match: {PackageName} (confidence: {Confidence:F2})", package.Title, routerResult.Confidence);
-        return $"**{package.Title}**\n\n{package.Content}";
+
+        string response = $"**{package.Title}**\n\n{package.Content}";
+
+        // Append documents if available
+        IReadOnlyList<Document> documents = await documentRepository.GetByPackageIdAsync(
+            package.Id, cancellationToken).ConfigureAwait(false);
+
+        if (documents.Count > 0)
+        {
+            response += "\n\n📎 **Documenten:**";
+            foreach (Document doc in documents)
+            {
+                string docLine = doc.FileUrl is not null
+                    ? $"\n- [{doc.Name}]({doc.FileUrl})"
+                    : $"\n- {doc.Name}";
+
+                if (doc.Description is not null)
+                {
+                    docLine += $" — _{doc.Description}_";
+                }
+
+                response += docLine;
+            }
+        }
+
+        return response;
     }
 
     private static string MapRole(MessageRole role) => role switch

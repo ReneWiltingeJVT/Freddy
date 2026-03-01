@@ -8,6 +8,7 @@ namespace Freddy.Application.Features.Admin.Documents.Commands;
 
 public sealed class DeleteDocumentCommandHandler(
     IDocumentRepository documentRepository,
+    IFileStorageService fileStorageService,
     ILogger<DeleteDocumentCommandHandler> logger) : IRequestHandler<DeleteDocumentCommand, Result<bool>>
 {
     public async Task<Result<bool>> Handle(DeleteDocumentCommand request, CancellationToken cancellationToken)
@@ -16,6 +17,12 @@ public sealed class DeleteDocumentCommandHandler(
         if (document is null || document.PackageId != request.PackageId)
         {
             return Result<bool>.NotFound($"Document {request.Id} not found.");
+        }
+
+        // Delete the associated file if one exists
+        if (!string.IsNullOrWhiteSpace(document.FileUrl))
+        {
+            await fileStorageService.DeleteAsync(document.FileUrl, cancellationToken).ConfigureAwait(false);
         }
 
         await documentRepository.DeleteAsync(document, cancellationToken).ConfigureAwait(false);

@@ -62,6 +62,45 @@ public sealed class AdminDocumentsController(IMediator mediator) : ControllerBas
     }
 
     /// <summary>
+    /// Uploads a file and creates a document record.
+    /// </summary>
+    [HttpPost("upload")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(typeof(DocumentDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [RequestSizeLimit(50 * 1024 * 1024)] // 50 MB
+    public async Task<ActionResult<DocumentDto>> UploadAsync(
+        Guid packageId,
+        IFormFile file,
+        [FromForm] string? description,
+        [FromForm] string? type,
+        CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+        {
+            return BadRequest(new ProblemDetails { Title = "No file uploaded.", Status = 400 });
+        }
+
+        // Auto-detect document type from extension if not provided
+        string documentType = type ?? DetectDocumentType(file.FileName);
+
+        await using Stream stream = file.OpenReadStream();
+        Result<DocumentDto> result = await mediator.Send(
+            new UploadDocumentCommand(
+                packageId,
+                file.FileName,
+                description,
+                documentType,
+                stream),
+            cancellationToken);
+
+        return result.IsSuccess
+            ? CreatedAtAction("List", new { packageId }, result.Value)
+            : result.ToActionResult();
+    }
+
+    /// <summary>
     /// Updates an existing document.
     /// </summary>
     [HttpPut("{id:guid}")]
@@ -103,5 +142,17 @@ public sealed class AdminDocumentsController(IMediator mediator) : ControllerBas
             new DeleteDocumentCommand(packageId, id), cancellationToken);
 
         return result.IsSuccess ? NoContent() : result.ToActionResult();
+    }
+
+    private static string DetectDocumentType(string fileName)
+    {
+        string extension = Path.GetExtension(fileName).ToLowerInvariant();
+        return extension switch
+        {
+            ".pdf" => "Pdf",
+            ".xlsx" or ".xls" or ".csv" => "Link",
+            ".doc" or ".docx" => "Pdf",
+            _ => "Link",
+        };
     }
 }

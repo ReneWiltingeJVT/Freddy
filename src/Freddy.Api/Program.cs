@@ -80,6 +80,9 @@ try
 
     builder.Services.AddProblemDetails();
 
+    // File storage
+    builder.Services.AddFileStorage(builder.Environment.WebRootPath);
+
     WebApplication app = builder.Build();
 
     app.UseMiddleware<ExceptionHandlingMiddleware>();
@@ -90,6 +93,7 @@ try
         app.UseSwaggerUI();
     }
 
+    app.UseStaticFiles();
     app.UseSerilogRequestLogging();
     app.UseCors();
     app.UseMiddleware<AdminApiKeyMiddleware>();

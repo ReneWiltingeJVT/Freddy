@@ -2,9 +2,11 @@
 
 using Freddy.Application.Common.Interfaces;
 using Freddy.Infrastructure.Persistence.Repositories;
+using Freddy.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 
 namespace Freddy.Infrastructure;
@@ -38,6 +40,20 @@ public static class DependencyInjection
 
         services.AddScoped<IChatService, AI.OllamaChatService>();
         services.AddScoped<IPackageRouter, AI.OllamaPackageRouter>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers file storage services.
+    /// </summary>
+    public static IServiceCollection AddFileStorage(this IServiceCollection services, string webRootPath)
+    {
+        services.AddSingleton<IFileStorageService>(sp =>
+        {
+            ILogger<LocalFileStorageService> logger = sp.GetRequiredService<ILogger<LocalFileStorageService>>();
+            return new LocalFileStorageService(webRootPath, logger);
+        });
 
         return services;
     }

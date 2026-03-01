@@ -85,6 +85,16 @@ public sealed class OllamaPackageRouter(
             logger.LogDebug("Package router raw response: {RawResponse}", rawContent);
             return ParseRouterResponse(rawContent, candidates);
         }
+        catch (HttpRequestException ex)
+        {
+            logger.LogError(ex, "AI service unreachable during package routing");
+            return CreateServiceUnavailableResult();
+        }
+        catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogError(ex, "AI service timed out during package routing");
+            return CreateServiceUnavailableResult();
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "Error during package routing");
@@ -154,6 +164,15 @@ public sealed class OllamaPackageRouter(
         Confidence = 0.0,
         NeedsConfirmation = false,
         Reason = "Kon de vraag niet classificeren.",
+    };
+
+    private static PackageRouterResult CreateServiceUnavailableResult() => new()
+    {
+        ChosenPackageId = null,
+        Confidence = 0.0,
+        NeedsConfirmation = false,
+        Reason = "AI-service is niet bereikbaar.",
+        IsServiceUnavailable = true,
     };
 
     private sealed record RouterJsonResponse
