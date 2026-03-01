@@ -4,9 +4,14 @@
 
 Clean Architecture with 3 layers:
 
-- **Freddy.Api** — Controllers, middleware, request models, Program.cs
+- **Freddy.Api** — Controllers, middleware, request models, Program.cs, static file serving
 - **Freddy.Application** — Entities, CQRS features (Commands/Queries/DTOs), interfaces, Result<T>
-- **Freddy.Infrastructure** — EF Core persistence, AI integrations (Ollama), DI registration
+- **Freddy.Infrastructure** — EF Core persistence, AI integrations (Ollama), file storage, DI registration
+
+Two frontend apps:
+
+- **Freddy.Web** — Chat interface (React, port 5173)
+- **Freddy.Backoffice** — Admin package management (React, port 5174)
 
 ## Key Patterns
 
@@ -41,9 +46,28 @@ Clean Architecture with 3 layers:
 - Only published packages appear in chat routing
 - Publish/Unpublish as separate endpoints
 
+### File Storage
+
+- `IFileStorageService` abstraction with `UploadAsync`/`DeleteAsync`
+- `LocalFileStorageService` stores in `wwwroot/uploads/documents/`
+- Files named `{guid}-{sanitizedName}` to prevent collisions
+- Served via ASP.NET Core static files middleware
+- Upload endpoint: multipart/form-data, 50MB limit, auto-detect document type
+
+### Chat Response Building
+
+- PackageRouter classifies user message against published packages
+- `IsServiceUnavailable` flag for AI connectivity issues
+- High-confidence match: returns package content + document links
+- Medium confidence: asks for confirmation
+- Low/no match: returns fallback message
+- Documents formatted as markdown links in response
+
 ## Component Relationships
 
 ```
-Chat Flow: User → ChatController → SendMessageCommand → PackageRouter (Ollama) → Published Packages
+Chat Flow: User → ChatController → SendMessageCommand → PackageRouter (Ollama) → Published Packages → Documents
 Admin Flow: Admin → AdminPackagesController → CQRS Commands/Queries → PackageRepository → PostgreSQL
+Upload Flow: Admin → AdminDocumentsController/upload → UploadDocumentCommand → FileStorageService → wwwroot/uploads
+Backoffice: React App → ky (X-Admin-Api-Key) → /api/admin/* → AdminControllers
 ```

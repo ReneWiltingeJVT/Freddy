@@ -33,23 +33,35 @@
 
 - Optimistic messages, timeout handling, delete conversation
 
-### Phase 8 — Backoffice Packages API (CURRENT — COMPLETE)
+### Phase 8 — Backoffice Packages API
 
 - Full CRUD for packages and documents
 - Publish/unpublish lifecycle
 - Admin API key authentication
 - Chat integration (only published packages visible)
-- 22 tests passing, 0 warnings
-- E2E verified all endpoints
+
+### Phase 9 — Backoffice Web App + Chat Fixes + Mock Data (CURRENT — COMPLETE)
+
+- Backoffice React app (Vite + Tailwind, port 5174) with package management and document upload
+- Chat error handling: AI unavailability detection, Dutch error messages
+- Document inclusion in chat responses for matched packages
+- File upload infrastructure (LocalFileStorageService, multipart endpoint)
+- 3 mock packages seeded with 6 documents total
+- 24 tests passing, 0 warnings
+- Committed on `feature/total-backoffice` branch
 
 ## What Works
 
-- Chat: Create conversation, send messages, AI responds with package routing
+- Chat: Create conversation, send messages, AI responds with package routing, documents included in responses
+- Chat: AI unavailability surfaced as user-friendly Dutch message
 - Packages: Full admin CRUD with publish lifecycle
-- Documents: Full admin CRUD nested under packages
+- Documents: Full admin CRUD + file upload (multipart, 50MB limit) nested under packages
 - Auth: API key middleware for admin routes
 - AI: Ollama package classification, Semantic Kernel chat completion
-- Frontend: React chat interface with real-time updates
+- Frontend (Chat): React chat interface with real-time updates
+- Frontend (Backoffice): Package list, create/edit, detail view with document management and file upload
+- Static files: Uploaded documents served via UseStaticFiles
+- Mock data: 3 published packages (Voedselbank, Medicatie in Beheer, Valpreventie) with documents
 
 ## Known Issues
 
@@ -57,8 +69,8 @@
 
 ## What's Left to Build
 
-- Backoffice frontend (React admin UI)
-- Additional test coverage
-- Package search improvements
 - User authentication (beyond API key)
 - Production deployment configuration
+- Additional test coverage (integration tests)
+- Document search/filtering in backoffice
+- Rich text editing for package content
