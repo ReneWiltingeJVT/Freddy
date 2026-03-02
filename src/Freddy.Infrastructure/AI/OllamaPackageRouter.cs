@@ -82,7 +82,7 @@ public sealed class OllamaPackageRouter(
                 return CreateFallbackResult();
             }
 
-            logger.LogDebug("Package router raw response: {RawResponse}", rawContent);
+            logger.LogInformation("[DEBUG] Package router raw response: {RawResponse}", rawContent);
             return ParseRouterResponse(rawContent, candidates);
         }
         catch (HttpRequestException ex)
@@ -93,6 +93,11 @@ public sealed class OllamaPackageRouter(
         catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
             logger.LogError(ex, "AI service timed out during package routing");
+            return CreateServiceUnavailableResult();
+        }
+        catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning(ex, "Package routing canceled (client disconnected or request aborted)");
             return CreateServiceUnavailableResult();
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

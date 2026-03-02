@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { ConversationList } from './ConversationList';
@@ -15,31 +16,68 @@ export function ChatPage() {
   const sendMessageMutation = useSendMessage(conversationId ?? '');
   const createConversationMutation = useCreateConversation();
   const deleteConversationMutation = useDeleteConversation();
+  const [isSending, setIsSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isBusy = sendMessageMutation.isPending || isSending;
 
   async function handleSendMessage(content: string) {
+    setError(null);
+
     if (!conversationId) {
-      // Create a new conversation, navigate, then send message with optimistic UI
-      const conversation = await createConversationMutation.mutateAsync(undefined);
-      navigate(`/chat/${conversation.id}`);
+      // === New conversation flow ===
+      setIsSending(true);
+      try {
+        console.log('[Freddy] Creating new conversation...');
+        const conversation = await createConversationMutation.mutateAsync(undefined);
+        console.log('[Freddy] Conversation created:', conversation.id);
 
-      // Optimistically show user message while waiting for AI
-      const optimisticMessage: MessageDto = {
-        id: `optimistic-${Date.now()}`,
-        role: 'user',
-        content,
-        createdAt: new Date().toISOString(),
-      };
-      queryClient.setQueryData<MessageDto[]>(
-        ['messages', conversation.id],
-        [optimisticMessage],
-      );
+        // Pre-seed the messages cache with the optimistic user message
+        // BEFORE navigating, so useMessages finds it immediately.
+        const optimisticMessage: MessageDto = {
+          id: `optimistic-${Date.now()}`,
+          role: 'user',
+          content,
+          createdAt: new Date().toISOString(),
+        };
+        queryClient.setQueryData<MessageDto[]>(
+          ['messages', conversation.id],
+          [optimisticMessage],
+        );
 
-      await apiSendMessage(conversation.id, content);
-      await queryClient.invalidateQueries({ queryKey: ['messages', conversation.id] });
-      await queryClient.invalidateQueries({ queryKey: ['conversations'] });
+        // Navigate (component stays mounted because of optional route param)
+        navigate(`/chat/${conversation.id}`, { replace: true });
+
+        // Cancel any background refetch that useMessages might trigger,
+        // so it doesn't overwrite our optimistic data with [].
+        await queryClient.cancelQueries({ queryKey: ['messages', conversation.id] });
+
+        // Send the actual message to the backend (slow — Ollama call)
+        console.log('[Freddy] Sending message to backend...');
+        const response = await apiSendMessage(conversation.id, content);
+        console.log('[Freddy] Backend response received:', response);
+
+        // Refetch to get all real messages (user + assistant)
+        await queryClient.invalidateQueries({ queryKey: ['messages', conversation.id] });
+        await queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      } catch (err) {
+        console.error('[Freddy] Error in new conversation flow:', err);
+        setError('Er ging iets mis bij het versturen van je bericht. Probeer het opnieuw.');
+      } finally {
+        setIsSending(false);
+      }
       return;
     }
-    await sendMessageMutation.mutateAsync(content);
+
+    // === Existing conversation flow ===
+    try {
+      console.log('[Freddy] Sending message to conversation:', conversationId);
+      await sendMessageMutation.mutateAsync(content);
+      console.log('[Freddy] Message sent successfully');
+    } catch (err) {
+      console.error('[Freddy] Error sending message:', err);
+      setError('Er ging iets mis bij het versturen van je bericht. Probeer het opnieuw.');
+    }
   }
 
   function handleNewConversation() {
@@ -55,6 +93,10 @@ export function ChatPage() {
     if (conversationId === id) {
       navigate('/chat');
     }
+  }
+
+  function dismissError() {
+    setError(null);
   }
 
   return (
@@ -84,16 +126,25 @@ export function ChatPage() {
 
       {/* Main chat area */}
       <main className="flex-1 flex flex-col">
+        {error && (
+          <div className="bg-red-50 border-b border-red-200 px-4 py-3 flex items-center justify-between">
+            <p className="text-sm text-red-700">{error}</p>
+            <button onClick={dismissError} className="text-red-500 hover:text-red-700 text-sm font-medium">
+              Sluiten
+            </button>
+          </div>
+        )}
+
         {conversationId ? (
           <>
             <ChatMessageList
               messages={messages}
               isLoading={messagesLoading}
-              isPending={sendMessageMutation.isPending}
+              isPending={isBusy}
             />
             <ChatInput
               onSend={handleSendMessage}
-              disabled={sendMessageMutation.isPending}
+              disabled={isBusy}
             />
           </>
         ) : (
@@ -107,7 +158,7 @@ export function ChatPage() {
               </p>
               <ChatInput
                 onSend={handleSendMessage}
-                disabled={createConversationMutation.isPending}
+                disabled={isBusy}
               />
             </div>
           </div>

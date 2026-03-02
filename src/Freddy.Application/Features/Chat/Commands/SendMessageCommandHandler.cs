@@ -20,9 +20,13 @@ public sealed class SendMessageCommandHandler(
         SendMessageCommand request,
         CancellationToken cancellationToken)
     {
+        logger.LogInformation("[DEBUG] SendMessageHandler — Start. ConversationId: {ConversationId}, Content: {Content}",
+            request.ConversationId, request.Content);
+
         Conversation? conversation = await conversationRepository.GetByIdAsync(request.ConversationId, cancellationToken).ConfigureAwait(false);
         if (conversation is null)
         {
+            logger.LogWarning("[DEBUG] SendMessageHandler — Conversation {ConversationId} NOT FOUND", request.ConversationId);
             return Result<MessageDto>.NotFound($"Conversation {request.ConversationId} not found.");
         }
 
@@ -36,15 +40,22 @@ public sealed class SendMessageCommandHandler(
             CreatedAt = DateTimeOffset.UtcNow,
         };
         _ = await conversationRepository.AddMessageAsync(userMessage, cancellationToken).ConfigureAwait(false);
+        logger.LogInformation("[DEBUG] SendMessageHandler — User message saved: {MessageId}", userMessage.Id);
 
         // 2. Get all published packages as routing candidates
         IReadOnlyList<Package> packages = await packageRepository.GetAllPublishedAsync(cancellationToken).ConfigureAwait(false);
+        logger.LogInformation("[DEBUG] SendMessageHandler — Found {PackageCount} published packages", packages.Count);
         PackageCandidate[] candidates = [.. packages
             .Select(p => new PackageCandidate(p.Id, p.Title, p.Description)),];
 
         // 3. Route via Ollama (JSON classifier)
+        logger.LogInformation("[DEBUG] SendMessageHandler — Calling PackageRouter...");
         PackageRouterResult routerResult = await packageRouter.RouteAsync(
             request.Content, candidates, cancellationToken).ConfigureAwait(false);
+        logger.LogInformation(
+            "[DEBUG] SendMessageHandler — Router returned: PackageId={PackageId}, Confidence={Confidence:F2}, NeedsConfirmation={NeedsConfirmation}, ServiceUnavailable={ServiceUnavailable}, Reason={Reason}",
+            routerResult.ChosenPackageId, routerResult.Confidence, routerResult.NeedsConfirmation,
+            routerResult.IsServiceUnavailable, routerResult.Reason);
 
         // 4. Build response based on routing result
         string assistantContent = await BuildResponseAsync(routerResult, cancellationToken).ConfigureAwait(false);
@@ -61,8 +72,8 @@ public sealed class SendMessageCommandHandler(
         _ = await conversationRepository.AddMessageAsync(assistantMessage, cancellationToken).ConfigureAwait(false);
 
         logger.LogInformation(
-            "Message processed for conversation {ConversationId} — confidence: {Confidence:F2}, packageId: {PackageId}",
-            request.ConversationId, routerResult.Confidence, routerResult.ChosenPackageId);
+            "[DEBUG] SendMessageHandler — COMPLETE. ConversationId={ConversationId}, Confidence={Confidence:F2}, PackageId={PackageId}, ResponseLength={ResponseLength}",
+            request.ConversationId, routerResult.Confidence, routerResult.ChosenPackageId, assistantContent.Length);
 
         return Result<MessageDto>.Success(new MessageDto(
             assistantMessage.Id,

@@ -13,7 +13,7 @@ function setToken(token: string): void {
 
 const api = ky.create({
   prefixUrl: '/api/v1',
-  timeout: 120_000,
+  timeout: 300_000,
   hooks: {
     beforeRequest: [
       (request) => {
@@ -21,6 +21,18 @@ const api = ky.create({
         if (token) {
           request.headers.set('Authorization', `Bearer ${token}`);
         }
+        console.log(`[Freddy API] ${request.method} ${request.url}`);
+      },
+    ],
+    afterResponse: [
+      (_request, _options, response) => {
+        console.log(`[Freddy API] Response: ${response.status} ${response.url}`);
+      },
+    ],
+    beforeError: [
+      (error) => {
+        console.error(`[Freddy API] Error: ${error.response?.status} ${error.response?.url}`, error.message);
+        return error;
       },
     ],
   },
