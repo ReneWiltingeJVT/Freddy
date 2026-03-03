@@ -46,7 +46,7 @@ public sealed class SendMessageCommandHandler(
         IReadOnlyList<Package> packages = await packageRepository.GetAllPublishedAsync(cancellationToken).ConfigureAwait(false);
         logger.LogInformation("[DEBUG] SendMessageHandler — Found {PackageCount} published packages", packages.Count);
         PackageCandidate[] candidates = [.. packages
-            .Select(p => new PackageCandidate(p.Id, p.Title, p.Description)),];
+            .Select(p => new PackageCandidate(p.Id, p.Title, p.Description, [.. p.Tags], [.. p.Synonyms])),];
 
         // 3. Route via Ollama (JSON classifier)
         logger.LogInformation("[DEBUG] SendMessageHandler — Calling PackageRouter...");

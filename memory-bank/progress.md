@@ -40,7 +40,7 @@
 - Admin API key authentication
 - Chat integration (only published packages visible)
 
-### Phase 9 — Backoffice Web App + Chat Fixes + Mock Data (CURRENT — COMPLETE)
+### Phase 9 — Backoffice Web App + Chat Fixes + Mock Data (COMPLETE)
 
 - Backoffice React app (Vite + Tailwind, port 5174) with package management and document upload
 - Chat error handling: AI unavailability detection, Dutch error messages
@@ -49,6 +49,16 @@
 - 3 mock packages seeded with 6 documents total
 - 24 tests passing, 0 warnings
 - Committed on `feature/total-backoffice` branch
+
+### Phase 10 — Fast-Path Routing (CURRENT — IN PROGRESS)
+
+- Two-lane routing: deterministic fast-path (<10ms) + Ollama disambiguation (slow-path, only for ambiguous cases)
+- FastPathRouter scores candidates via title/tag/synonym/description matching
+- CompositePackageRouter orchestrates fast-path→Ollama decision flow
+- PackageCandidate extended with Tags and Synonyms from Package entity
+- Configurable thresholds via appsettings.json (Routing section)
+- 41 tests passing (24 existing + 17 new)
+- Branch: `feature/fast-path-routing`
 
 ## What Works
 

@@ -56,17 +56,21 @@ Two frontend apps:
 
 ### Chat Response Building
 
-- PackageRouter classifies user message against published packages
+- CompositePackageRouter classifies user message using two-lane strategy
+- Lane A (Fast-path): FastPathRouter scores candidates deterministically via title/tag/synonym matching (<10ms)
+- Lane B (Slow-path): OllamaPackageRouter only called when 2+ candidates in ambiguity zone (0.3-0.6)
+- Thresholds configurable via `Routing` section in appsettings.json
 - `IsServiceUnavailable` flag for AI connectivity issues
-- High-confidence match: returns package content + document links
-- Medium confidence: asks for confirmation
-- Low/no match: returns fallback message
+- High-confidence match (≥0.6): returns package content + document links
+- Single medium confidence (0.3-0.6): asks for confirmation
+- Multiple medium confidence: delegates to Ollama for disambiguation
+- Low/no match (<0.3): returns fallback message
 - Documents formatted as markdown links in response
 
 ## Component Relationships
 
 ```
-Chat Flow: User → ChatController → SendMessageCommand → PackageRouter (Ollama) → Published Packages → Documents
+Chat Flow: User → ChatController → SendMessageCommand → CompositePackageRouter → FastPathRouter (deterministic) → [optional: OllamaPackageRouter (LLM)] → Published Packages → Documents
 Admin Flow: Admin → AdminPackagesController → CQRS Commands/Queries → PackageRepository → PostgreSQL
 Upload Flow: Admin → AdminDocumentsController/upload → UploadDocumentCommand → FileStorageService → wwwroot/uploads
 Backoffice: React App → ky (X-Admin-Api-Key) → /api/admin/* → AdminControllers

@@ -2,7 +2,26 @@
 
 ## Current Work Focus
 
-Phase 9 (Backoffice Web App + Chat Fixes + Mock Data) is complete. All three deliverables accomplished: backoffice React app, improved chat error handling with document inclusion, and 3 mock packages seeded.
+Phase 10 (Fast-Path Routing) is in implementation. Two-lane routing strategy replaces always-Ollama routing with deterministic fast-path + Ollama disambiguation fallback.
+
+## Recent Changes (Phase 10 — Fast-Path Routing)
+
+### Two-Lane Routing Architecture
+
+- `PackageCandidate` — Extended with `Tags` and `Synonyms` (IReadOnlyList<string>) to enable deterministic matching
+- `IFastPathRouter` — New interface in Application layer for deterministic keyword scoring
+- `ScoredCandidate` — New record pairing a PackageCandidate with its fast-path score
+- `FastPathRouter` — Deterministic router implementation: title (1.0/0.7), tags (0.6), synonyms (0.6), partial (0.3), description (0.2)
+- `CompositePackageRouter` — Orchestrates fast-path → optional Ollama: ≥0.6 direct, 0.3-0.6 single→confirm, 0.3-0.6 multi→Ollama, <0.3 no match
+- `RoutingOptions` — Configurable thresholds (HighConfidenceThreshold=0.6, AmbiguityFloorThreshold=0.3) via appsettings.json
+- `DependencyInjection` — Updated: IPackageRouter→CompositePackageRouter, IFastPathRouter→FastPathRouter, OllamaPackageRouter registered directly
+- `SendMessageCommandHandler` — Updated PackageCandidate construction to include Tags and Synonyms from Package entity
+
+### Test Coverage
+
+- 11 new FastPathRouter tests (exact title, title-in-message, tag match, synonym match, partial, no match, ordering, case-insensitive, description overlap, real-world seed data)
+- 6 new CompositePackageRouter tests (no candidates, high confidence, medium confidence, no scores, below floor, multiple ambiguous)
+- All 41 tests passing (24 existing + 17 new)
 
 ## Recent Changes (Phase 9 — Backoffice Web App, Chat Fixes, Mock Data)
 
