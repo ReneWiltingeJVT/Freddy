@@ -3,6 +3,7 @@ using System;
 using Freddy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Freddy.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(FreddyDbContext))]
-    partial class FreddyDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260303131827_AddConversationPendingState")]
+    partial class AddConversationPendingState
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -38,9 +41,9 @@ namespace Freddy.Infrastructure.Persistence.Migrations
                         .HasColumnName("pending_package_id");
 
                     b.Property<int>("PendingState")
-                        .HasDefaultValue(0)
                         .HasColumnType("integer")
-                        .HasColumnName("pending_state");
+                        .HasColumnName("pending_state")
+                        .HasDefaultValue(0);
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -128,10 +131,6 @@ namespace Freddy.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("content");
-
-                    b.Property<string?>("AttachmentsJson")
-                        .HasColumnType("text")
-                        .HasColumnName("attachments_json");
 
                     b.Property<Guid>("ConversationId")
                         .HasColumnType("uuid")

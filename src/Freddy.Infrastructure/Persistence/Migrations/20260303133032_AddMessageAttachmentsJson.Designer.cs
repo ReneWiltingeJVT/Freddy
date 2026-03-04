@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Freddy.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(FreddyDbContext))]
-    [Migration("20260301191129_SeedMockPackagesAndDocuments")]
-    partial class SeedMockPackagesAndDocuments
+    [Migration("20260303133032_AddMessageAttachmentsJson")]
+    partial class AddMessageAttachmentsJson
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -35,6 +35,15 @@ namespace Freddy.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<Guid?>("PendingPackageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pending_package_id");
+
+                    b.Property<int>("PendingState")
+                        .HasDefaultValue(0)
+                        .HasColumnType("integer")
+                        .HasColumnName("pending_state");
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -122,6 +131,10 @@ namespace Freddy.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("content");
+
+                    b.Property<string?>("AttachmentsJson")
+                        .HasColumnType("text")
+                        .HasColumnName("attachments_json");
 
                     b.Property<Guid>("ConversationId")
                         .HasColumnType("uuid")

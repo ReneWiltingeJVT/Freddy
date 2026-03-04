@@ -15,4 +15,10 @@ public interface IConversationRepository
     Task<IReadOnlyList<Message>> GetMessagesAsync(Guid conversationId, CancellationToken cancellationToken);
 
     Task DeleteAsync(Guid conversationId, CancellationToken cancellationToken);
+
+    Task SetPendingStateAsync(
+        Guid conversationId,
+        Guid? packageId,
+        ConversationPendingState state,
+        CancellationToken cancellationToken);
 }

@@ -12,5 +12,16 @@ public sealed class Conversation
 
     public DateTimeOffset UpdatedAt { get; set; }
 
+    /// <summary>
+    /// Set when the assistant is waiting for user input (package confirmation or document delivery).
+    /// Cleared once the interaction resolves.
+    /// </summary>
+    public Guid? PendingPackageId { get; set; }
+
+    /// <summary>
+    /// Tracks what the assistant is currently waiting for.
+    /// </summary>
+    public ConversationPendingState PendingState { get; set; } = ConversationPendingState.None;
+
     public ICollection<Message> Messages { get; set; } = [];
 }

@@ -10,6 +10,12 @@ public sealed class Message
 
     public string Content { get; set; } = string.Empty;
 
+    /// <summary>
+    /// JSON-serialised list of <c>AttachmentDto</c> objects (null when no attachments).
+    /// Populated for document-delivery assistant messages.
+    /// </summary>
+    public string? AttachmentsJson { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public Conversation Conversation { get; set; } = null!;

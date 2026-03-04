@@ -31,6 +31,10 @@ public sealed class MessageConfiguration : IEntityTypeConfiguration<Message>
             .HasColumnName("content")
             .IsRequired();
 
+        builder.Property(m => m.AttachmentsJson)
+            .HasColumnName("attachments_json")
+            .IsRequired(false);
+
         builder.Property(m => m.CreatedAt)
             .HasColumnName("created_at")
             .IsRequired();

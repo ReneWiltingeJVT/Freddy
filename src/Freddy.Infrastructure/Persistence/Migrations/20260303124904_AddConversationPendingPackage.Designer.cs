@@ -3,6 +3,7 @@ using System;
 using Freddy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Freddy.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(FreddyDbContext))]
-    partial class FreddyDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260303124904_AddConversationPendingPackage")]
+    partial class AddConversationPendingPackage
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -33,15 +36,6 @@ namespace Freddy.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<Guid?>("PendingPackageId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("pending_package_id");
-
-                    b.Property<int>("PendingState")
-                        .HasDefaultValue(0)
-                        .HasColumnType("integer")
-                        .HasColumnName("pending_state");
-
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -51,6 +45,10 @@ namespace Freddy.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("PendingPackageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pending_package_id");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
@@ -128,10 +126,6 @@ namespace Freddy.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("content");
-
-                    b.Property<string?>("AttachmentsJson")
-                        .HasColumnType("text")
-                        .HasColumnName("attachments_json");
 
                     b.Property<Guid>("ConversationId")
                         .HasColumnType("uuid")
