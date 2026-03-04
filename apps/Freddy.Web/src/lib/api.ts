@@ -11,8 +11,23 @@ function setToken(token: string): void {
   localStorage.setItem(TOKEN_KEY, token);
 }
 
+function clearToken(): void {
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+function isTokenValid(token: string): boolean {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    // Add 10-second buffer to avoid edge cases
+    return typeof payload.exp === 'number' && payload.exp * 1000 > Date.now() + 10_000;
+  } catch {
+    return false;
+  }
+}
+
 const api = ky.create({
   prefixUrl: '/api/v1',
+  timeout: 300_000,
   hooks: {
     beforeRequest: [
       (request) => {
@@ -20,14 +35,28 @@ const api = ky.create({
         if (token) {
           request.headers.set('Authorization', `Bearer ${token}`);
         }
+        console.log(`[Freddy API] ${request.method} ${request.url}`);
+      },
+    ],
+    afterResponse: [
+      (_request, _options, response) => {
+        console.log(`[Freddy API] Response: ${response.status} ${response.url}`);
+      },
+    ],
+    beforeError: [
+      (error) => {
+        console.error(`[Freddy API] Error: ${error.response?.status} ${error.response?.url}`, error.message);
+        return error;
       },
     ],
   },
 });
 
 export async function ensureAuthToken(): Promise<void> {
-  if (getToken()) return;
+  const token = getToken();
+  if (token && isTokenValid(token)) return;
 
+  clearToken();
   const response = await api.post('auth/dev-token').json<TokenResponse>();
   setToken(response.token);
 }
@@ -50,4 +79,9 @@ export async function getMessages(conversationId: string): Promise<MessageDto[]>
 export async function sendMessage(conversationId: string, content: string): Promise<MessageDto> {
   await ensureAuthToken();
   return api.post(`chat/conversations/${conversationId}/messages`, { json: { content } }).json<MessageDto>();
+}
+
+export async function deleteConversation(conversationId: string): Promise<void> {
+  await ensureAuthToken();
+  await api.delete(`chat/conversations/${conversationId}`);
 }

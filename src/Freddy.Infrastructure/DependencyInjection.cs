@@ -1,10 +1,13 @@
 #pragma warning disable IDE0058 // Expression value is never used — EF and DI builder chains
 
 using Freddy.Application.Common.Interfaces;
+using Freddy.Infrastructure.AI;
 using Freddy.Infrastructure.Persistence.Repositories;
+using Freddy.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 
 namespace Freddy.Infrastructure;
@@ -19,6 +22,8 @@ public static class DependencyInjection
 
         // Repositories
         services.AddScoped<IConversationRepository, ConversationRepository>();
+        services.AddScoped<IPackageRepository, Persistence.Repositories.PackageRepository>();
+        services.AddScoped<IDocumentRepository, Persistence.Repositories.DocumentRepository>();
 
         // AI — Ollama via Semantic Kernel
         string aiEndpoint = configuration["AI:Endpoint"] ?? "http://localhost:11434";
@@ -35,6 +40,39 @@ public static class DependencyInjection
 #pragma warning restore SKEXP0070
 
         services.AddScoped<IChatService, AI.OllamaChatService>();
+
+        // Routing — two-lane strategy: fast-path (deterministic) + slow-path (Ollama disambiguation)
+        services.AddOptions<RoutingOptions>()
+            .Configure(opts =>
+            {
+                IConfigurationSection section = configuration.GetSection(RoutingOptions.SectionName);
+                if (double.TryParse(section["HighConfidenceThreshold"], out double high))
+                {
+                    opts.HighConfidenceThreshold = high;
+                }
+
+                if (double.TryParse(section["AmbiguityFloorThreshold"], out double floor))
+                {
+                    opts.AmbiguityFloorThreshold = floor;
+                }
+            });
+        services.AddScoped<IFastPathRouter, FastPathRouter>();
+        services.AddScoped<OllamaPackageRouter>();
+        services.AddScoped<IPackageRouter, CompositePackageRouter>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers file storage services.
+    /// </summary>
+    public static IServiceCollection AddFileStorage(this IServiceCollection services, string webRootPath)
+    {
+        services.AddSingleton<IFileStorageService>(sp =>
+        {
+            ILogger<LocalFileStorageService> logger = sp.GetRequiredService<ILogger<LocalFileStorageService>>();
+            return new LocalFileStorageService(webRootPath, logger);
+        });
 
         return services;
     }

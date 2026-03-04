@@ -55,4 +55,33 @@ public sealed class ConversationRepository(FreddyDbContext dbContext) : IConvers
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
     }
+
+    public async Task DeleteAsync(Guid conversationId, CancellationToken cancellationToken)
+    {
+        await dbContext.Messages
+            .Where(m => m.ConversationId == conversationId)
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        await dbContext.Conversations
+            .Where(c => c.Id == conversationId)
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task SetPendingStateAsync(
+        Guid conversationId,
+        Guid? packageId,
+        ConversationPendingState state,
+        CancellationToken cancellationToken)
+    {
+        await dbContext.Conversations
+            .Where(c => c.Id == conversationId)
+            .ExecuteUpdateAsync(
+                s => s
+                    .SetProperty(c => c.PendingPackageId, packageId)
+                    .SetProperty(c => c.PendingState, state),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
 }

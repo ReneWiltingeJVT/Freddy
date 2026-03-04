@@ -3,7 +3,6 @@
 using Freddy.Application.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-
 namespace Freddy.Infrastructure.Persistence.Configurations;
 
 public sealed class ConversationConfiguration : IEntityTypeConfiguration<Conversation>
@@ -33,6 +32,16 @@ public sealed class ConversationConfiguration : IEntityTypeConfiguration<Convers
         builder.Property(c => c.UpdatedAt)
             .HasColumnName("updated_at")
             .IsRequired();
+
+        builder.Property(c => c.PendingPackageId)
+            .HasColumnName("pending_package_id")
+            .IsRequired(false);
+
+        builder.Property(c => c.PendingState)
+            .HasColumnName("pending_state")
+            .HasConversion<int>()
+            .IsRequired()
+            .HasDefaultValue(ConversationPendingState.None);
 
         builder.HasIndex(c => c.UserId)
             .HasDatabaseName("ix_conversations_user_id");

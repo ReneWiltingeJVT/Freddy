@@ -33,6 +33,15 @@ namespace Freddy.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<Guid?>("PendingPackageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pending_package_id");
+
+                    b.Property<int>("PendingState")
+                        .HasDefaultValue(0)
+                        .HasColumnType("integer")
+                        .HasColumnName("pending_state");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -55,6 +64,59 @@ namespace Freddy.Infrastructure.Persistence.Migrations
                     b.ToTable("conversations", (string)null);
                 });
 
+            modelBuilder.Entity("Freddy.Application.Entities.Document", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("description");
+
+                    b.Property<string>("FileUrl")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("file_url");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("PackageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("package_id");
+
+                    b.Property<string>("StepsContent")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("steps_content");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("type");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PackageId")
+                        .HasDatabaseName("ix_documents_package_id");
+
+                    b.ToTable("documents", (string)null);
+                });
+
             modelBuilder.Entity("Freddy.Application.Entities.Message", b =>
                 {
                     b.Property<Guid>("Id")
@@ -66,6 +128,10 @@ namespace Freddy.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("content");
+
+                    b.Property<string?>("AttachmentsJson")
+                        .HasColumnType("text")
+                        .HasColumnName("attachments_json");
 
                     b.Property<Guid>("ConversationId")
                         .HasColumnType("uuid")
@@ -92,6 +158,89 @@ namespace Freddy.Infrastructure.Persistence.Migrations
                     b.ToTable("messages", (string)null);
                 });
 
+            modelBuilder.Entity("Freddy.Application.Entities.Package", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("content");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("IsPublished")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_published");
+
+                    b.Property<bool>("RequiresConfirmation")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("requires_confirmation");
+
+                    b.PrimitiveCollection<string[]>("Synonyms")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("synonyms");
+
+                    b.PrimitiveCollection<string[]>("Tags")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("tags");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("title");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsPublished")
+                        .HasDatabaseName("ix_packages_is_published");
+
+                    b.HasIndex("Synonyms")
+                        .HasDatabaseName("ix_packages_synonyms");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Synonyms"), "gin");
+
+                    b.HasIndex("Tags")
+                        .HasDatabaseName("ix_packages_tags");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Tags"), "gin");
+
+                    b.ToTable("packages", (string)null);
+                });
+
+            modelBuilder.Entity("Freddy.Application.Entities.Document", b =>
+                {
+                    b.HasOne("Freddy.Application.Entities.Package", "Package")
+                        .WithMany("Documents")
+                        .HasForeignKey("PackageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Package");
+                });
+
             modelBuilder.Entity("Freddy.Application.Entities.Message", b =>
                 {
                     b.HasOne("Freddy.Application.Entities.Conversation", "Conversation")
@@ -106,6 +255,11 @@ namespace Freddy.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Freddy.Application.Entities.Conversation", b =>
                 {
                     b.Navigation("Messages");
+                });
+
+            modelBuilder.Entity("Freddy.Application.Entities.Package", b =>
+                {
+                    b.Navigation("Documents");
                 });
 #pragma warning restore 612, 618
         }

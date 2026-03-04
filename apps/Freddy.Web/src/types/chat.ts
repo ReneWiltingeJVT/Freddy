@@ -1,8 +1,15 @@
+export interface AttachmentDto {
+  name: string;
+  url: string;
+  description?: string;
+}
+
 export interface MessageDto {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   createdAt: string;
+  attachments?: AttachmentDto[];
 }
 
 export interface ConversationDto {

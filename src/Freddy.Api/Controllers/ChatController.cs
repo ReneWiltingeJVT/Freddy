@@ -17,7 +17,7 @@ namespace Freddy.Api.Controllers;
 [Route("api/v1/chat")]
 [Authorize]
 [Produces("application/json")]
-public sealed class ChatController(IMediator mediator) : ControllerBase
+public sealed class ChatController(IMediator mediator, ILogger<ChatController> logger) : ControllerBase
 {
     /// <summary>
     /// Creates a new conversation.
@@ -29,8 +29,13 @@ public sealed class ChatController(IMediator mediator) : ControllerBase
         [FromBody] CreateConversationRequest request,
         CancellationToken cancellationToken)
     {
+        logger.LogInformation("[DEBUG] CreateConversation request — Title: {Title}", request.Title);
+
         Result<ConversationDto> result = await mediator.Send(
             new CreateConversationCommand(request.Title), cancellationToken);
+
+        logger.LogInformation("[DEBUG] CreateConversation result — Success: {IsSuccess}, Id: {Id}",
+            result.IsSuccess, result.Value?.Id);
 
         return result.IsSuccess
             ? CreatedAtAction(
@@ -80,14 +85,38 @@ public sealed class ChatController(IMediator mediator) : ControllerBase
         [FromBody] SendMessageRequest request,
         CancellationToken cancellationToken)
     {
+        logger.LogInformation("[DEBUG] SendMessage request — ConversationId: {ConversationId}, Content: {Content}",
+            conversationId, request.Content);
+
         Result<MessageDto> result = await mediator.Send(
             new SendMessageCommand(conversationId, request.Content), cancellationToken);
+
+        logger.LogInformation("[DEBUG] SendMessage result — Success: {IsSuccess}, Role: {Role}, ContentLength: {Length}",
+            result.IsSuccess, result.Value?.Role, result.Value?.Content?.Length);
 
         return result.IsSuccess
             ? CreatedAtAction(
                 "GetConversationMessages",
                 new { conversationId },
                 result.Value)
+            : result.ToActionResult();
+    }
+
+    /// <summary>
+    /// Deletes a conversation and all its messages.
+    /// </summary>
+    [HttpDelete("conversations/{conversationId:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteConversationAsync(
+        Guid conversationId,
+        CancellationToken cancellationToken)
+    {
+        Result<bool> result = await mediator.Send(
+            new DeleteConversationCommand(conversationId), cancellationToken);
+
+        return result.IsSuccess
+            ? NoContent()
             : result.ToActionResult();
     }
 }

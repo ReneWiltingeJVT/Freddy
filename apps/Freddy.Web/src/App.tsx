@@ -5,8 +5,7 @@ export function App() {
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/chat" replace />} />
-      <Route path="/chat" element={<ChatPage />} />
-      <Route path="/chat/:conversationId" element={<ChatPage />} />
+      <Route path="/chat/:conversationId?" element={<ChatPage />} />
     </Routes>
   );
 }
