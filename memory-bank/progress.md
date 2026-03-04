@@ -60,14 +60,15 @@
 - 41 tests passing (24 existing + 17 new)
 - Branch: `feature/fast-path-routing`
 
-### Phase 11 — Lightweight LLM + Chitchat Design (CURRENT — PLAN COMPLETE)
+### Phase 11 — Lightweight LLM + Chitchat (COMPLETE)
 
-- Documentation-only phase: analysis, ADR, design docs, solution overview
-- ADR-0005: Replace Mistral 7B with Qwen 2.5 1.5B for slow-path classification
-- Chitchat design: deterministic small talk detection + template responses
-- New conversation flow: SmallTalk → FastPath → Lightweight LLM
-- Concrete implementation checklist ready for next phase
-- Branch: `plan/lightweight-llm-and-chitchat`
+- **Documentation phase**: ADR-0005, chitchat design, solution overview, routing analysis
+- **Implementation**: Model swap (Mistral 7B → Qwen 2.5 1.5B), inference params (Temperature 0.1, NumPredict 128), HTTP timeout (5min → 15s configurable)
+- SmallTalkDetector: deterministic Dutch word-list detection for 5 categories with template responses
+- Handler integration: small talk detected before LLM call, routing lane logged
+- Created missing entity/interface stubs for Package/Document that were broken on main
+- 61 tests passing (16 Application + 45 AI)
+- Branches: `plan/lightweight-llm-and-chitchat` (docs), `feature/lightweight-llm-and-chitchat` (code)
 
 ## What Works
 
@@ -88,7 +89,6 @@
 
 ## What's Left to Build
 
-- **Phase 11 implementation**: model swap, inference params, SmallTalkDetector, pipeline integration, tests
 - User authentication (beyond API key)
 - Production deployment configuration
 - Additional test coverage (integration tests)

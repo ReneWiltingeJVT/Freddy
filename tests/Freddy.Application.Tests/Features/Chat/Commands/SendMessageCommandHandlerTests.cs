@@ -14,13 +14,17 @@ public sealed class SendMessageCommandHandlerTests
 {
     private readonly IConversationRepository _repository = Substitute.For<IConversationRepository>();
     private readonly IChatService _chatService = Substitute.For<IChatService>();
+    private readonly ISmallTalkDetector _smallTalkDetector = Substitute.For<ISmallTalkDetector>();
     private readonly SendMessageCommandHandler _handler;
 
     public SendMessageCommandHandlerTests()
     {
+        _smallTalkDetector.Detect(Arg.Any<string>()).Returns(SmallTalkResult.NoMatch);
+
         _handler = new SendMessageCommandHandler(
             _repository,
             _chatService,
+            _smallTalkDetector,
             NullLogger<SendMessageCommandHandler>.Instance);
     }
 
@@ -102,5 +106,39 @@ public sealed class SendMessageCommandHandlerTests
         // Assert
         result.IsSuccess.Should().BeTrue();
         result.Value!.Content.Should().Contain("Sorry");
+    }
+
+    [Fact]
+    public async Task Handle_SmallTalkMessage_ReturnsTemplateWithoutCallingAi()
+    {
+        // Arrange
+        var conversationId = Guid.CreateVersion7();
+        var conversation = new Conversation
+        {
+            Id = conversationId,
+            UserId = Guid.CreateVersion7(),
+            Title = "Test",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+
+        _repository.GetByIdAsync(conversationId, Arg.Any<CancellationToken>())
+            .Returns(conversation);
+        _repository.AddMessageAsync(Arg.Any<Message>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo => callInfo.Arg<Message>());
+
+        var smallTalkResult = new SmallTalkResult(SmallTalkCategory.Greeting, "Hoi! 👋 Waarmee kan ik je helpen?");
+        _smallTalkDetector.Detect("hallo").Returns(smallTalkResult);
+
+        SendMessageCommand command = new(conversationId, "hallo");
+
+        // Act
+        Result<MessageDto> result = await _handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Role.Should().Be("assistant");
+        result.Value.Content.Should().Be("Hoi! 👋 Waarmee kan ik je helpen?");
+        await _chatService.DidNotReceive().GetResponseAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 }

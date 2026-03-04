@@ -1,5 +1,6 @@
 #pragma warning disable IDE0058 // Expression value is never used — EF and DI builder chains
 
+using System.Globalization;
 using Freddy.Application.Common.Interfaces;
 using Freddy.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -22,19 +23,21 @@ public static class DependencyInjection
 
         // AI — Ollama via Semantic Kernel
         string aiEndpoint = configuration["AI:Endpoint"] ?? "http://localhost:11434";
-        string aiModelId = configuration["AI:ModelId"] ?? "mistral:7b";
+        string aiModelId = configuration["AI:ModelId"] ?? "qwen2.5:1.5b";
+        int timeoutSeconds = int.TryParse(configuration["AI:TimeoutSeconds"], CultureInfo.InvariantCulture, out int ts) ? ts : 15;
 
 #pragma warning disable SKEXP0070 // Ollama connector is experimental
         var ollamaHttpClient = new HttpClient
         {
             BaseAddress = new Uri(aiEndpoint),
-            Timeout = TimeSpan.FromMinutes(5),
+            Timeout = TimeSpan.FromSeconds(timeoutSeconds),
         };
         services.AddKernel()
             .AddOllamaChatCompletion(aiModelId, ollamaHttpClient);
 #pragma warning restore SKEXP0070
 
         services.AddScoped<IChatService, AI.OllamaChatService>();
+        services.AddSingleton<ISmallTalkDetector, AI.SmallTalkDetector>();
 
         return services;
     }

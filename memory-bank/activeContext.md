@@ -2,25 +2,33 @@
 
 ## Current Work Focus
 
-Phase 11 (Lightweight LLM + Chitchat) — planning and documentation complete on branch `plan/lightweight-llm-and-chitchat`. This phase optimizes slow-path routing by replacing Mistral 7B with Qwen 2.5 1.5B and adds small talk detection with template responses.
+Phase 11 (Lightweight LLM + Chitchat) — implementation complete on branch `feature/lightweight-llm-and-chitchat`. Replaced Mistral 7B with Qwen 2.5 1.5B, added deterministic small talk detection with template responses, configured inference parameters, and reduced HTTP timeout.
 
-## Recent Changes (Phase 11 — Lightweight LLM & Chitchat Design)
+## Recent Changes (Phase 11 — Lightweight LLM & Chitchat Implementation)
 
-### Documentation Deliverables (Plan Only — No Code)
+### Code Changes
 
-- `docs/architecture/current-routing-explained.md` — Stakeholder-friendly analysis of current routing: why Mistral 7B is too heavy, missing inference parameters, no small talk handling, latency issues
-- `docs/architecture/adr/0005-lightweight-llm.md` — ADR proposing Qwen 2.5 1.5B (1.5B params) to replace Mistral 7B (7B params) for slow-path classification. Includes model comparison, config recommendations (temperature 0.1, num_predict 128, num_ctx 2048, timeout 15s)
-- `docs/mvp/chitchat-design.md` — Complete design for SmallTalkDetector: 5 categories (Greeting, HelpIntent, Thanks, Farewell, GenericConfusion), deterministic word-list detection, hardcoded template responses, Mermaid flow diagram, metrics & validation targets, concrete implementation checklist
-- `docs/solution/freddy-mvp-solution-overview.md` — Full MVP solution overview (v1.1) updated with small talk layer, lightweight LLM rationale, new latency targets
-- `docs/architecture/adr/README.md` — Added ADR-0005 to index
+- **Model swap**: `appsettings.json` AI:ModelId changed from `mistral:7b` to `qwen2.5:1.5b`, added `AI:TimeoutSeconds: 15`
+- **Inference params**: `OllamaChatService` now sends `OllamaPromptExecutionSettings` (Temperature 0.1, NumPredict 128)
+- **HTTP timeout**: Reduced from 5 minutes to configurable 15s (via `AI:TimeoutSeconds`)
+- **ISmallTalkDetector**: New interface in Application/Common/Interfaces with `SmallTalkResult Detect(string message)`
+- **SmallTalkCategory**: Enum — None, Greeting, HelpIntent, Thanks, Farewell, GenericConfusion
+- **SmallTalkResult**: Sealed record with `NoMatch` static property and `IsSmallTalk` computed property
+- **SmallTalkDetector**: Deterministic implementation in Infrastructure/AI with Dutch word lists for 5 categories, greeting prefix matching, punctuation-only detection, and template responses in Dutch
+- **SendMessageCommandHandler**: Integrated small talk check before LLM call; extracted `HandleSmallTalk()` and `HandleLlmResponseAsync()` private methods; logs routing lane (small-talk vs llm)
+- **DependencyInjection**: Registered `ISmallTalkDetector → SmallTalkDetector` as singleton
 
-### Key Decisions
+### Missing Entity/Interface Stubs (Pre-existing on main)
 
-- **Model**: Qwen 2.5 1.5B (1.0 GB RAM, ~30-50 tok/s CPU) replaces Mistral 7B (4.5 GB RAM, ~5-10 tok/s CPU)
-- **Small talk**: Pure deterministic detection (word lists) — no LLM dependency, <1ms, 100% predictable
-- **Pipeline order**: SmallTalk → FastPath → SlowPath (LLM only for multi-ambiguous cases)
-- **Inference settings**: Temperature 0.1, MaxTokens 128, Timeout 15s (currently: no settings, 5min timeout)
-- **Target latency**: slow-path < 1.5s (was 3-10s), end-to-end p95 < 2s
+- Created `Package.cs`, `Document.cs`, `DocumentType.cs` entities and `IPackageRepository`, `IDocumentRepository` interfaces that were referenced by Admin handlers but missing from the `main` branch
+
+### Test Coverage
+
+- 45 new SmallTalkDetector tests (greeting, help intent, thanks, farewell, confusion, real questions, empty/whitespace, case insensitivity, punctuation stripping, prefix matching, long remainder)
+- 1 new handler test: `Handle_SmallTalkMessage_ReturnsTemplateWithoutCallingAi` — verifies template response and no AI service call
+- Existing 3 handler tests updated with `ISmallTalkDetector` mock (configured to return `NoMatch`)
+- New `Freddy.AI.Tests` test project added to solution
+- All 61 tests passing (16 Application + 45 AI)
 
 ## Recent Changes (Phase 10 — Fast-Path Routing)
 
