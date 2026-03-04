@@ -16,6 +16,7 @@ formaat: Status, Context, Decision, Consequences.
 | [0002](0002-vector-store-choice.md) | Vector Store Keuze | Accepted | 2026-02-28 |
 | [0003](0003-mobile-stack-choice.md) | Mobile Stack Keuze | Superseded | 2026-02-28 |
 | [0004](0004-frontend-framework-choice.md) | Frontend Framework Keuze | Accepted | 2026-02-28 |
+| [0005](0005-lightweight-llm.md) | Lichtgewicht LLM voor Routing | Proposed | 2026-03-04 |
 
 ### Nieuwe ADR aanmaken
 

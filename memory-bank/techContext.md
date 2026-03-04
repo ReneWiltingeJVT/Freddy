@@ -11,7 +11,7 @@
 | MediatR | 14.x | CQRS mediator |
 | FluentValidation | 12.x | Request validation |
 | Semantic Kernel | 1.72.0 | AI orchestration |
-| Ollama | — | Local LLM (mistral:7b) |
+| Ollama | — | Local LLM (mistral:7b → planned: qwen2.5:1.5b) |
 | React | 19 | Frontend framework |
 | TypeScript | 5.9 | Frontend language |
 | Vite | 6 | Frontend build tool |

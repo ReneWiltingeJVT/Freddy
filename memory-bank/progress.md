@@ -50,7 +50,7 @@
 - 24 tests passing, 0 warnings
 - Committed on `feature/total-backoffice` branch
 
-### Phase 10 — Fast-Path Routing (CURRENT — IN PROGRESS)
+### Phase 10 — Fast-Path Routing (COMPLETE)
 
 - Two-lane routing: deterministic fast-path (<10ms) + Ollama disambiguation (slow-path, only for ambiguous cases)
 - FastPathRouter scores candidates via title/tag/synonym/description matching
@@ -59,6 +59,16 @@
 - Configurable thresholds via appsettings.json (Routing section)
 - 41 tests passing (24 existing + 17 new)
 - Branch: `feature/fast-path-routing`
+
+### Phase 11 — Lightweight LLM + Chitchat (COMPLETE)
+
+- **Documentation phase**: ADR-0005, chitchat design, solution overview, routing analysis
+- **Implementation**: Model swap (Mistral 7B → Qwen 2.5 1.5B), inference params (Temperature 0.1, NumPredict 128), HTTP timeout (5min → 15s configurable)
+- SmallTalkDetector: deterministic Dutch word-list detection for 5 categories with template responses
+- Handler integration: small talk detected before LLM call, routing lane logged
+- Created missing entity/interface stubs for Package/Document that were broken on main
+- 61 tests passing (16 Application + 45 AI)
+- Branches: `plan/lightweight-llm-and-chitchat` (docs), `feature/lightweight-llm-and-chitchat` (code)
 
 ## What Works
 

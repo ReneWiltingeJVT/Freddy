@@ -54,23 +54,23 @@ Two frontend apps:
 - Served via ASP.NET Core static files middleware
 - Upload endpoint: multipart/form-data, 50MB limit, auto-detect document type
 
-### Chat Response Building
+### Chat Response Building (Three-Layer Pipeline — Planned)
 
-- CompositePackageRouter classifies user message using two-lane strategy
-- Lane A (Fast-path): FastPathRouter scores candidates deterministically via title/tag/synonym matching (<10ms)
-- Lane B (Slow-path): OllamaPackageRouter only called when 2+ candidates in ambiguity zone (0.3-0.6)
+- **Layer 0 (Small Talk)**: ISmallTalkDetector checks for greetings/thanks/confusion before routing (<1ms, deterministic word-list matching). Returns hardcoded template responses. No AI, no package lookup.
+- **Layer 1 (Fast-path)**: FastPathRouter scores candidates deterministically via title/tag/synonym matching (<10ms)
+- **Layer 2 (Slow-path)**: OllamaPackageRouter only called when 2+ candidates in ambiguity zone (0.3-0.6). Planned model: Qwen 2.5 1.5B (was Mistral 7B) with Temperature=0.1, MaxTokens=128, Timeout=15s
 - Thresholds configurable via `Routing` section in appsettings.json
 - `IsServiceUnavailable` flag for AI connectivity issues
 - High-confidence match (≥0.6): returns package content + document links
 - Single medium confidence (0.3-0.6): asks for confirmation
-- Multiple medium confidence: delegates to Ollama for disambiguation
+- Multiple medium confidence: delegates to lightweight LLM for disambiguation
 - Low/no match (<0.3): returns fallback message
 - Documents formatted as markdown links in response
 
 ## Component Relationships
 
 ```
-Chat Flow: User → ChatController → SendMessageCommand → CompositePackageRouter → FastPathRouter (deterministic) → [optional: OllamaPackageRouter (LLM)] → Published Packages → Documents
+Chat Flow: User → ChatController → SendMessageCommand → [SmallTalkDetector (planned)] → CompositePackageRouter → FastPathRouter (deterministic) → [optional: OllamaPackageRouter (lightweight LLM)] → Published Packages → Documents
 Admin Flow: Admin → AdminPackagesController → CQRS Commands/Queries → PackageRepository → PostgreSQL
 Upload Flow: Admin → AdminDocumentsController/upload → UploadDocumentCommand → FileStorageService → wwwroot/uploads
 Backoffice: React App → ky (X-Admin-Api-Key) → /api/admin/* → AdminControllers

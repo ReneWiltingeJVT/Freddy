@@ -3,6 +3,7 @@ using Freddy.Application.Common.Interfaces;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
+using Microsoft.SemanticKernel.Connectors.Ollama;
 
 namespace Freddy.Infrastructure.AI;
 
@@ -27,8 +28,17 @@ public sealed class OllamaChatService(
 
             logger.LogInformation("Sending message to LLM ({MessageLength} chars)", userMessage.Length);
 
+#pragma warning disable SKEXP0070 // Ollama connector is experimental
+            var executionSettings = new OllamaPromptExecutionSettings
+            {
+                Temperature = 0.1f,
+                NumPredict = 128,
+            };
+#pragma warning restore SKEXP0070
+
             ChatMessageContent response = await chatCompletion.GetChatMessageContentAsync(
                 chatHistory,
+                executionSettings,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
             string? content = response.Content;

@@ -13,6 +13,7 @@ public sealed class SendMessageCommandHandler(
     IPackageRepository packageRepository,
     IDocumentRepository documentRepository,
     IPackageRouter packageRouter,
+    ISmallTalkDetector smallTalkDetector,
     ILogger<SendMessageCommandHandler> logger) : IRequestHandler<SendMessageCommand, Result<MessageDto>>
 {
     private const double HighConfidenceThreshold = 0.8;
@@ -60,29 +61,56 @@ public sealed class SendMessageCommandHandler(
         }
 
         // 1. Save user message
+        string trimmedContent = request.Content.Trim();
         var userMessage = new Message
         {
             Id = Guid.CreateVersion7(),
             ConversationId = request.ConversationId,
             Role = MessageRole.User,
-            Content = request.Content.Trim(),
+            Content = trimmedContent,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         _ = await conversationRepository.AddMessageAsync(userMessage, cancellationToken).ConfigureAwait(false);
         logger.LogInformation("[DEBUG] SendMessageHandler — User message saved: {MessageId}", userMessage.Id);
 
-        // 2. Dispatch based on pending state
+        // 2. Small talk fast-path: skip routing entirely
+        SmallTalkResult smallTalkResult = smallTalkDetector.Detect(trimmedContent);
+        if (smallTalkResult.IsSmallTalk)
+        {
+            logger.LogInformation(
+                "[SmallTalk] Matched category {Category} for conversation {ConversationId}",
+                smallTalkResult.Category,
+                request.ConversationId);
+
+            var smallTalkMessage = new Message
+            {
+                Id = Guid.CreateVersion7(),
+                ConversationId = request.ConversationId,
+                Role = MessageRole.Assistant,
+                Content = smallTalkResult.TemplateResponse!,
+                CreatedAt = DateTimeOffset.UtcNow,
+            };
+            _ = await conversationRepository.AddMessageAsync(smallTalkMessage, cancellationToken).ConfigureAwait(false);
+
+            return Result<MessageDto>.Success(new MessageDto(
+                smallTalkMessage.Id,
+                MapRole(smallTalkMessage.Role),
+                smallTalkMessage.Content,
+                smallTalkMessage.CreatedAt));
+        }
+
+        // 3. Dispatch based on pending state
         AssistantResponse response = conversation.PendingState switch
         {
             ConversationPendingState.AwaitingPackageConfirmation =>
-                await HandlePackageConfirmationAsync(conversation, request.Content.Trim(), cancellationToken)
+                await HandlePackageConfirmationAsync(conversation, trimmedContent, cancellationToken)
                     .ConfigureAwait(false),
 
             ConversationPendingState.AwaitingDocumentDelivery =>
-                await HandleDocumentConfirmationAsync(conversation, request.Content.Trim(), cancellationToken)
+                await HandleDocumentConfirmationAsync(conversation, trimmedContent, cancellationToken)
                     .ConfigureAwait(false),
 
-            _ => await RouteAndBuildResponseAsync(conversation, request.Content.Trim(), cancellationToken)
+            _ => await RouteAndBuildResponseAsync(conversation, trimmedContent, cancellationToken)
                     .ConfigureAwait(false),
         };
 
@@ -148,7 +176,7 @@ public sealed class SendMessageCommandHandler(
         if (isNo)
         {
             await ClearPendingAsync(conversation.Id, cancellationToken).ConfigureAwait(false);
-            logger.LogInformation("[Confirmation] User denied package match → asking to rephrase");
+            logger.LogInformation("[Confirmation] User denied package match ÔåÆ asking to rephrase");
             return new AssistantResponse("Geen probleem! Kun je je vraag iets anders omschrijven, dan help ik je verder.");
         }
 
@@ -348,3 +376,4 @@ public sealed class SendMessageCommandHandler(
         _ => "unknown",
     };
 }
+

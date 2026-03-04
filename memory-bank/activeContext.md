@@ -2,7 +2,33 @@
 
 ## Current Work Focus
 
-Phase 10 (Fast-Path Routing) is in implementation. Two-lane routing strategy replaces always-Ollama routing with deterministic fast-path + Ollama disambiguation fallback.
+Phase 11 (Lightweight LLM + Chitchat) — implementation complete on branch `feature/lightweight-llm-and-chitchat`. Replaced Mistral 7B with Qwen 2.5 1.5B, added deterministic small talk detection with template responses, configured inference parameters, and reduced HTTP timeout.
+
+## Recent Changes (Phase 11 — Lightweight LLM & Chitchat Implementation)
+
+### Code Changes
+
+- **Model swap**: `appsettings.json` AI:ModelId changed from `mistral:7b` to `qwen2.5:1.5b`, added `AI:TimeoutSeconds: 15`
+- **Inference params**: `OllamaChatService` now sends `OllamaPromptExecutionSettings` (Temperature 0.1, NumPredict 128)
+- **HTTP timeout**: Reduced from 5 minutes to configurable 15s (via `AI:TimeoutSeconds`)
+- **ISmallTalkDetector**: New interface in Application/Common/Interfaces with `SmallTalkResult Detect(string message)`
+- **SmallTalkCategory**: Enum — None, Greeting, HelpIntent, Thanks, Farewell, GenericConfusion
+- **SmallTalkResult**: Sealed record with `NoMatch` static property and `IsSmallTalk` computed property
+- **SmallTalkDetector**: Deterministic implementation in Infrastructure/AI with Dutch word lists for 5 categories, greeting prefix matching, punctuation-only detection, and template responses in Dutch
+- **SendMessageCommandHandler**: Integrated small talk check before LLM call; extracted `HandleSmallTalk()` and `HandleLlmResponseAsync()` private methods; logs routing lane (small-talk vs llm)
+- **DependencyInjection**: Registered `ISmallTalkDetector → SmallTalkDetector` as singleton
+
+### Missing Entity/Interface Stubs (Pre-existing on main)
+
+- Created `Package.cs`, `Document.cs`, `DocumentType.cs` entities and `IPackageRepository`, `IDocumentRepository` interfaces that were referenced by Admin handlers but missing from the `main` branch
+
+### Test Coverage
+
+- 45 new SmallTalkDetector tests (greeting, help intent, thanks, farewell, confusion, real questions, empty/whitespace, case insensitivity, punctuation stripping, prefix matching, long remainder)
+- 1 new handler test: `Handle_SmallTalkMessage_ReturnsTemplateWithoutCallingAi` — verifies template response and no AI service call
+- Existing 3 handler tests updated with `ISmallTalkDetector` mock (configured to return `NoMatch`)
+- New `Freddy.AI.Tests` test project added to solution
+- All 61 tests passing (16 Application + 45 AI)
 
 ## Recent Changes (Phase 10 — Fast-Path Routing)
 
@@ -75,6 +101,16 @@ Phase 10 (Fast-Path Routing) is in implementation. Two-lane routing strategy rep
 
 ## Next Steps
 
+- **Phase 11 implementation** — execute the implementation checklist from chitchat-design.md:
+  1. Pull qwen2.5:1.5b model in Ollama
+  2. Update appsettings.json AI:ModelId
+  3. Add PromptExecutionSettings to OllamaPackageRouter
+  4. Reduce HttpClient timeout to 15s
+  5. Create ISmallTalkDetector interface + SmallTalkDetector implementation
+  6. Integrate SmallTalkDetector into SendMessageCommandHandler
+  7. Add structured logging (routing.lane, routing.latency_ms)
+  8. Write SmallTalkDetector unit tests (50+ positive, 20+ negative cases)
+  9. Update existing routing tests
 - User authentication beyond API key
 - Production deployment configuration
 - Additional test coverage (integration tests)
