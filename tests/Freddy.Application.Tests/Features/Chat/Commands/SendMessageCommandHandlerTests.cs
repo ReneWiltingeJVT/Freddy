@@ -268,6 +268,7 @@ public sealed class SendMessageCommandHandlerTests
             Description = "Protocol voor voedselbankpakketten",
             Content = "Stap 1: Check voorraad.",
             IsPublished = true,
+            RequiresConfirmation = true, // Package requires confirmation
         };
 
         _conversationRepository.GetByIdAsync(conversationId, Arg.Any<CancellationToken>())
@@ -372,5 +373,62 @@ public sealed class SendMessageCommandHandlerTests
         result.Value!.Role.Should().Be("assistant");
         result.Value.Content.Should().Be("Hoi! \uD83D\uDC4B Waarmee kan ik je helpen?");
         await _packageRouter.DidNotReceive().RouteAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<PackageCandidate>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_MediumConfidence_WithRequiresConfirmationFalse_DeliversDirectly()
+    {
+        // Arrange
+        var conversationId = Guid.CreateVersion7();
+        var packageId = Guid.CreateVersion7();
+        var conversation = new Conversation
+        {
+            Id = conversationId,
+            UserId = Guid.CreateVersion7(),
+            Title = "Test",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        var package = new Package
+        {
+            Id = packageId,
+            Title = "Voedselbank",
+            Description = "Protocol voor voedselbankpakketten",
+            Content = "Stap 1: Check voorraad.",
+            IsPublished = true,
+            RequiresConfirmation = false, // Key: confirmation disabled
+        };
+
+        _conversationRepository.GetByIdAsync(conversationId, Arg.Any<CancellationToken>())
+            .Returns(conversation);
+        _conversationRepository.AddMessageAsync(Arg.Any<Message>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo => callInfo.Arg<Message>());
+        _packageRepository.GetAllPublishedAsync(Arg.Any<CancellationToken>())
+            .Returns([package]);
+        _packageRepository.GetByIdAsync(packageId, Arg.Any<CancellationToken>())
+            .Returns(package);
+        _documentRepository.GetByPackageIdAsync(packageId, Arg.Any<CancellationToken>())
+            .Returns([]);
+        _packageRouter.RouteAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<PackageCandidate>>(), Arg.Any<CancellationToken>())
+            .Returns(new PackageRouterResult
+            {
+                ChosenPackageId = packageId,
+                Confidence = 0.7, // Medium confidence
+                NeedsConfirmation = true, // Router suggests confirmation
+                Reason = "Mogelijk match",
+            });
+        _smallTalkDetector.Detect(Arg.Any<string>()).Returns(SmallTalkResult.NoMatch);
+
+        SendMessageCommand command = new(conversationId, "Iets over eten");
+
+        // Act
+        Result<MessageDto> result = await _handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        // Should deliver directly without asking "Klopt dat?"
+        result.Value!.Content.Should().NotContain("Klopt dat?");
+        result.Value.Content.Should().Contain("Voedselbank");
+        result.Value.Content.Should().Contain("Check voorraad");
     }
 }
