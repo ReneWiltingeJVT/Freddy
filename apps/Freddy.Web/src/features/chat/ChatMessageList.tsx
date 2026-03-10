@@ -3,11 +3,11 @@ import ReactMarkdown from 'react-markdown';
 import type { MessageDto, AttachmentDto } from '../../types/chat';
 
 function DownloadButton({ attachment }: { attachment: AttachmentDto }) {
+  const downloadUrl = `/api/files/download?path=${encodeURIComponent(attachment.url)}`;
+
   return (
     <a
-      href={attachment.url}
-      target="_blank"
-      rel="noopener noreferrer"
+      href={downloadUrl}
       download
       className="flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 hover:bg-blue-100 active:bg-blue-200 transition-colors cursor-pointer no-underline"
     >
