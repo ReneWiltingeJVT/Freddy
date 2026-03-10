@@ -383,4 +383,3 @@ public sealed class SendMessageCommandHandler(
         _ => "unknown",
     };
 }
-
