@@ -15,14 +15,16 @@ import {
 import type { CreatePackageRequest, UpdatePackageRequest } from '../types/admin';
 
 const PACKAGES_KEY = ['packages'] as const;
-const packageKey = (id: string) => ['packages', id] as const;
+const packagesListKey = (params?: { search?: string; isPublished?: boolean }) =>
+  [...PACKAGES_KEY, 'list', params] as const;
+const packageKey = (id: string) => [...PACKAGES_KEY, 'detail', id] as const;
 
 export function usePackages(params?: {
   search?: string;
   isPublished?: boolean;
 }) {
   return useQuery({
-    queryKey: [...PACKAGES_KEY, params],
+    queryKey: packagesListKey(params),
     queryFn: () => getPackages(params),
   });
 }
@@ -40,7 +42,7 @@ export function useCreatePackage() {
   return useMutation({
     mutationFn: (data: CreatePackageRequest) => createPackage(data),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: PACKAGES_KEY });
+      void queryClient.invalidateQueries({ queryKey: PACKAGES_KEY }); // invalidates all ['packages', ...]
     },
   });
 }
