@@ -275,10 +275,15 @@ public sealed class SendMessageCommandHandler(
             return new AssistantResponse("Sorry, er is een fout opgetreden bij het ophalen van de informatie. Probeer het opnieuw.");
         }
 
-        // Medium confidence — ask for confirmation first
-        if (routerResult.NeedsConfirmation || routerResult.Confidence < HighConfidenceThreshold)
+        // Check if package requires confirmation AND router suggests it
+        bool shouldAskConfirmation = package.RequiresConfirmation &&
+                                     (routerResult.NeedsConfirmation || routerResult.Confidence < HighConfidenceThreshold);
+
+        if (shouldAskConfirmation)
         {
-            logger.LogInformation("Match needs confirmation: {PackageName} (confidence: {Confidence:F2})", package.Title, routerResult.Confidence);
+            logger.LogInformation(
+                "Match needs confirmation: {PackageName} (confidence: {Confidence:F2}, RequiresConfirmation: {RequiresConfirmation})",
+                package.Title, routerResult.Confidence, package.RequiresConfirmation);
 
             await conversationRepository.SetPendingStateAsync(
                 conversation.Id, package.Id,
@@ -288,8 +293,10 @@ public sealed class SendMessageCommandHandler(
             return new AssistantResponse($"Ik denk dat je vraag gaat over **{package.Title}**. Klopt dat?\n\n_{package.Description}_");
         }
 
-        // High confidence — deliver directly
-        logger.LogInformation("High confidence match: {PackageName} (confidence: {Confidence:F2})", package.Title, routerResult.Confidence);
+        // High confidence or confirmation not required — deliver directly
+        logger.LogInformation(
+            "Delivering package directly: {PackageName} (confidence: {Confidence:F2}, RequiresConfirmation: {RequiresConfirmation})",
+            package.Title, routerResult.Confidence, package.RequiresConfirmation);
         return await DeliverPackageAndMaybeOfferDocumentsAsync(conversation, package, cancellationToken).ConfigureAwait(false);
     }
 
@@ -376,4 +383,3 @@ public sealed class SendMessageCommandHandler(
         _ => "unknown",
     };
 }
-
