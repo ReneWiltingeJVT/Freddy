@@ -27,10 +27,11 @@ public sealed class AdminPackagesController(IMediator mediator) : ControllerBase
     public async Task<ActionResult<IReadOnlyList<PackageSummaryDto>>> ListAsync(
         [FromQuery] bool? isPublished,
         [FromQuery] string? search,
+        [FromQuery] string? category,
         CancellationToken cancellationToken)
     {
         Result<IReadOnlyList<PackageSummaryDto>> result = await mediator.Send(
-            new ListPackagesQuery(isPublished, search), cancellationToken);
+            new ListPackagesQuery(isPublished, search, category), cancellationToken);
         return result.ToActionResult();
     }
 
@@ -66,6 +67,8 @@ public sealed class AdminPackagesController(IMediator mediator) : ControllerBase
                 request.Content,
                 request.Tags ?? [],
                 request.Synonyms ?? [],
+                request.Category,
+                request.ClientId,
                 request.RequiresConfirmation),
             cancellationToken);
 
@@ -94,6 +97,8 @@ public sealed class AdminPackagesController(IMediator mediator) : ControllerBase
                 request.Content,
                 request.Tags ?? [],
                 request.Synonyms ?? [],
+                request.Category,
+                request.ClientId,
                 request.RequiresConfirmation),
             cancellationToken);
 

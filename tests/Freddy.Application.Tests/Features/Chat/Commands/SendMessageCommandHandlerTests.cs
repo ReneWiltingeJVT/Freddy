@@ -17,11 +17,14 @@ public sealed class SendMessageCommandHandlerTests
     private readonly IDocumentRepository _documentRepository = Substitute.For<IDocumentRepository>();
     private readonly IPackageRouter _packageRouter = Substitute.For<IPackageRouter>();
     private readonly ISmallTalkDetector _smallTalkDetector = Substitute.For<ISmallTalkDetector>();
+    private readonly IClientDetector _clientDetector = Substitute.For<IClientDetector>();
     private readonly SendMessageCommandHandler _handler;
 
     public SendMessageCommandHandlerTests()
     {
         _smallTalkDetector.Detect(Arg.Any<string>()).Returns(SmallTalkResult.NoMatch);
+        _clientDetector.DetectAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(ClientDetectionResult.NoMatch);
 
         _handler = new SendMessageCommandHandler(
             _conversationRepository,
@@ -29,6 +32,7 @@ public sealed class SendMessageCommandHandlerTests
             _documentRepository,
             _packageRouter,
             _smallTalkDetector,
+            _clientDetector,
             NullLogger<SendMessageCommandHandler>.Instance);
     }
 

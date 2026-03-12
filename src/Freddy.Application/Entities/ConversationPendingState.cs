@@ -20,4 +20,10 @@ public enum ConversationPendingState
     /// PendingPackageId holds the package whose documents to return.
     /// </summary>
     AwaitingDocumentDelivery = 2,
+
+    /// <summary>
+    /// The assistant asked the user which client they mean (multiple alias matches).
+    /// PendingClientId holds one of the candidate client IDs for disambiguation.
+    /// </summary>
+    AwaitingClientConfirmation = 3,
 }

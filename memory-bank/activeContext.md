@@ -2,33 +2,66 @@
 
 ## Current Work Focus
 
-Phase 11 (Lightweight LLM + Chitchat) — implementation complete on branch `feature/lightweight-llm-and-chitchat`. Replaced Mistral 7B with Qwen 2.5 1.5B, added deterministic small talk detection with template responses, configured inference parameters, and reduced HTTP timeout.
+Phase 12 (MVP Retrieval Redesign) — implementation complete on branch `feature/mvp-retrieval-redesign`. Added package categories (Protocol/WorkInstruction/PersonalPlan), client entity with CRUD, client detection in chat, scoped retrieval (personal plans filtered by client), category boost for PersonalPlan packages, audit logging infrastructure, and LLM zero-match recovery with top-3 suggestions.
 
-## Recent Changes (Phase 11 — Lightweight LLM & Chitchat Implementation)
+## Recent Changes (Phase 12 — MVP Retrieval Redesign)
 
-### Code Changes
+### Phase A — Scoring Improvements (FastPathRouter)
 
-- **Model swap**: `appsettings.json` AI:ModelId changed from `mistral:7b` to `qwen2.5:1.5b`, added `AI:TimeoutSeconds: 15`
-- **Inference params**: `OllamaChatService` now sends `OllamaPromptExecutionSettings` (Temperature 0.1, NumPredict 128)
-- **HTTP timeout**: Reduced from 5 minutes to configurable 15s (via `AI:TimeoutSeconds`)
-- **ISmallTalkDetector**: New interface in Application/Common/Interfaces with `SmallTalkResult Detect(string message)`
-- **SmallTalkCategory**: Enum — None, Greeting, HelpIntent, Thanks, Farewell, GenericConfusion
-- **SmallTalkResult**: Sealed record with `NoMatch` static property and `IsSmallTalk` computed property
-- **SmallTalkDetector**: Deterministic implementation in Infrastructure/AI with Dutch word lists for 5 categories, greeting prefix matching, punctuation-only detection, and template responses in Dutch
-- **SendMessageCommandHandler**: Integrated small talk check before LLM call; extracted `HandleSmallTalk()` and `HandleLlmResponseAsync()` private methods; logs routing lane (small-talk vs llm)
-- **DependencyInjection**: Registered `ISmallTalkDetector → SmallTalkDetector` as singleton
+- **Stopword filtering**: Dutch stopwords excluded from scoring to reduce noise
+- **Content overlap scoring**: New scoring dimension for package content words (0.15 for ≥3 overlap words)
+- **Document name scoring**: New scoring dimension for document names (0.15 for overlap)
+- **N-gram similarity**: Bigram similarity scoring for fuzzy partial matches (threshold 0.3)
+- **Description overlap raised**: From 0.2 to 0.3
 
-### Missing Entity/Interface Stubs (Pre-existing on main)
+### Phase A — LLM Zero-Match Recovery + Suggestions
 
-- Created `Package.cs`, `Document.cs`, `DocumentType.cs` entities and `IPackageRepository`, `IDocumentRepository` interfaces that were referenced by Admin handlers but missing from the `main` branch
+- **CompositePackageRouter**: Complete rewrite with `HandleZeroMatchRecoveryAsync` for LLM fallback when no FastPath match
+- **`SuggestedPackage` record**: Title + Description for top-3 suggestions
+- **`PackageRouterResult.SuggestedPackages`**: Populated when no match found
+- **`SendMessageCommandHandler.BuildSuggestionResponse()`**: Formats top-3 suggestions for user
 
-### Test Coverage
+### Phase B — Package Categories
 
-- 45 new SmallTalkDetector tests (greeting, help intent, thanks, farewell, confusion, real questions, empty/whitespace, case insensitivity, punctuation stripping, prefix matching, long remainder)
-- 1 new handler test: `Handle_SmallTalkMessage_ReturnsTemplateWithoutCallingAi` — verifies template response and no AI service call
-- Existing 3 handler tests updated with `ISmallTalkDetector` mock (configured to return `NoMatch`)
-- New `Freddy.AI.Tests` test project added to solution
-- All 61 tests passing (16 Application + 45 AI)
+- **`PackageCategory` enum**: Protocol (0), WorkInstruction (1), PersonalPlan (2)
+- **Package entity**: Added `Category` and `ClientId` properties with Client navigation
+- **Admin API**: DTOs, Commands, Validators, Controller, and QueryHandlers all updated with Category/ClientId
+- **Validators**: Category must be Protocol/WorkInstruction/PersonalPlan; PersonalPlan requires ClientId
+- **Repository**: `GetAllAsync` accepts optional `PackageCategory?` filter; new `GetPublishedByClientIdAsync`
+- **EF Config**: CHECK constraint `ck_packages_category_client`, indexes on category and client_id
+
+### Phase B — Category Boost
+
+- **FastPathRouter**: +0.1 score boost for PersonalPlan packages (capped at 1.0, only on nonzero scores)
+
+### Phase C — Client Entity + CRUD
+
+- **Client entity**: Id, DisplayName, Aliases (text[]), IsActive, timestamps
+- **Full CQRS**: List/Get/Create/Update/Delete with Commands, Handlers, Validators, DTOs
+- **AdminClientsController**: Full REST CRUD at `api/admin/clients`
+- **ClientRepository**: CRUD + `FindByAliasAsync` with `EF.Functions.ILike`
+- **EF Config**: GIN index on aliases, display_name index, is_active index
+
+### Phase C — Client Detection + Scoped Retrieval
+
+- **IClientDetector + ClientDetector**: Deterministic alias matching — longest display name first, then longest alias (≥3 chars), case-insensitive
+- **SendMessageCommandHandler**: Rewrote `RouteAndBuildResponseAsync` — when client detected, merges general packages (non-PersonalPlan) + client-specific PersonalPlan; when no client, excludes PersonalPlan entirely
+
+### Phase C — Audit Logging Infrastructure
+
+- **AuditLog entity**: Id, UserId (Guid), Action, EntityType, EntityId, Details (jsonb), Timestamp
+- **IAuditLogRepository + AuditLogRepository**: LogAsync and GetByEntityAsync
+- **EF Config**: Indexes on user_id, entity_type, timestamp
+
+### Phase D — Forward Compatibility
+
+- **DocumentChunk entity**: Prepared for future RAG support (no migration yet)
+
+### Infrastructure
+
+- **DI Registration**: IClientRepository, IAuditLogRepository, IClientDetector all registered as scoped
+- **EF Migration**: `AddCategoriesClientsAuditLog` — clients table, audit_logs table, packages.category + client_id columns, conversations.pending_client_id, CHECK constraint, FK, indexes
+- **Test Coverage**: 116 tests passing (28 new tests added for category boost, client detection, client validation, client handler, package category validation)
 
 ## Recent Changes (Phase 10 — Fast-Path Routing)
 

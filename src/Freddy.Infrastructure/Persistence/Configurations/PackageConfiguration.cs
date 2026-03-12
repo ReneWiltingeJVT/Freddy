@@ -10,7 +10,13 @@ public sealed class PackageConfiguration : IEntityTypeConfiguration<Package>
 {
     public void Configure(EntityTypeBuilder<Package> builder)
     {
-        builder.ToTable("packages");
+        builder.ToTable("packages", t =>
+        {
+            // PersonalPlan must have client_id; Protocol/WorkInstruction must NOT
+            t.HasCheckConstraint(
+                "ck_packages_category_client",
+                "(category != 2 AND client_id IS NULL) OR (category = 2 AND client_id IS NOT NULL)");
+        });
 
         builder.HasKey(p => p.Id);
 
@@ -39,6 +45,16 @@ public sealed class PackageConfiguration : IEntityTypeConfiguration<Package>
             .HasColumnName("synonyms")
             .HasColumnType("text[]");
 
+        builder.Property(p => p.Category)
+            .HasColumnName("category")
+            .HasConversion<int>()
+            .IsRequired()
+            .HasDefaultValue(PackageCategory.Protocol);
+
+        builder.Property(p => p.ClientId)
+            .HasColumnName("client_id")
+            .IsRequired(false);
+
         builder.Property(p => p.IsPublished)
             .HasColumnName("is_published")
             .HasDefaultValue(value: false);
@@ -66,9 +82,20 @@ public sealed class PackageConfiguration : IEntityTypeConfiguration<Package>
             .HasMethod("gin")
             .HasDatabaseName("ix_packages_synonyms");
 
+        builder.HasIndex(p => p.Category)
+            .HasDatabaseName("ix_packages_category");
+
+        builder.HasIndex(p => p.ClientId)
+            .HasDatabaseName("ix_packages_client_id");
+
         builder.HasMany(p => p.Documents)
             .WithOne(d => d.Package)
             .HasForeignKey(d => d.PackageId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne(p => p.Client)
+            .WithMany(c => c.Packages)
+            .HasForeignKey(p => p.ClientId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

@@ -19,6 +19,12 @@ public sealed class Conversation
     public Guid? PendingPackageId { get; set; }
 
     /// <summary>
+    /// Set when the assistant is waiting for the user to confirm which client they mean.
+    /// Cleared once the client is confirmed or the interaction is abandoned.
+    /// </summary>
+    public Guid? PendingClientId { get; set; }
+
+    /// <summary>
     /// Tracks what the assistant is currently waiting for.
     /// </summary>
     public ConversationPendingState PendingState { get; set; } = ConversationPendingState.None;

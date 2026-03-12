@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Freddy.Application.Common.Interfaces;
+using Freddy.Application.Entities;
 using Freddy.Infrastructure.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -177,9 +178,9 @@ public sealed class FastPathRouterTests
             "Help met het voorbereiden en organiseren",
             [candidate]);
 
-        // Assert
+        // Assert — description overlap raised to 0.3 after scoring improvements
         results.Should().HaveCount(1);
-        results[0].Score.Should().Be(0.2);
+        results[0].Score.Should().Be(0.3);
     }
 
     [Fact]
@@ -213,5 +214,58 @@ public sealed class FastPathRouterTests
         results.Should().HaveCountGreaterThan(0);
         results[0].Candidate.Title.Should().Be("Voedselbank");
         results[0].Score.Should().BeGreaterThanOrEqualTo(0.6);
+    }
+
+    [Fact]
+    public void Score_PersonalPlanCategory_ReceivesCategoryBoost()
+    {
+        // Arrange — two identical candidates, one PersonalPlan
+        PackageCandidate protocol = new(
+            Guid.CreateVersion7(), "Medicatiebeheer", "Protocol voor medicatie",
+            ["medicatie"], ["medicijnen"], "", null, PackageCategory.Protocol);
+
+        PackageCandidate personalPlan = new(
+            Guid.CreateVersion7(), "Medicatiebeheer", "Protocol voor medicatie",
+            ["medicatie"], ["medicijnen"], "", null, PackageCategory.PersonalPlan);
+
+        // Act
+        IReadOnlyList<ScoredCandidate> protocolResults = _router.Score("medicatie", [protocol]);
+        IReadOnlyList<ScoredCandidate> personalResults = _router.Score("medicatie", [personalPlan]);
+
+        // Assert — PersonalPlan should score 0.1 higher due to category boost
+        protocolResults.Should().HaveCount(1);
+        personalResults.Should().HaveCount(1);
+        personalResults[0].Score.Should().Be(protocolResults[0].Score + 0.1);
+    }
+
+    [Fact]
+    public void Score_PersonalPlanCategory_BoostCappedAtOne()
+    {
+        // Arrange — PersonalPlan with exact title match (1.0) should stay at 1.0
+        PackageCandidate personalPlan = new(
+            Guid.CreateVersion7(), "Voedselbank", "Beschrijving",
+            [], [], "", null, PackageCategory.PersonalPlan);
+
+        // Act
+        IReadOnlyList<ScoredCandidate> results = _router.Score("Voedselbank", [personalPlan]);
+
+        // Assert — capped at 1.0 despite +0.1 boost
+        results.Should().HaveCount(1);
+        results[0].Score.Should().Be(1.0);
+    }
+
+    [Fact]
+    public void Score_PersonalPlanCategory_NoBoostWhenZeroScore()
+    {
+        // Arrange — PersonalPlan that doesn't match at all should remain absent
+        PackageCandidate personalPlan = new(
+            Guid.CreateVersion7(), "XYZ Plan", "Onbekend onderwerp",
+            [], [], "", null, PackageCategory.PersonalPlan);
+
+        // Act
+        IReadOnlyList<ScoredCandidate> results = _router.Score("Wat is het weer vandaag?", [personalPlan]);
+
+        // Assert — no match means no boost
+        results.Should().BeEmpty();
     }
 }

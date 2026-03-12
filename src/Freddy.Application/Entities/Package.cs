@@ -17,6 +17,17 @@ public sealed class Package
 
     public ICollection<string> Synonyms { get; set; } = [];
 
+    /// <summary>
+    /// Categorises the package: Protocol (general), WorkInstruction (practical), PersonalPlan (client-specific).
+    /// </summary>
+    public PackageCategory Category { get; set; } = PackageCategory.Protocol;
+
+    /// <summary>
+    /// Required when <see cref="Category"/> is <see cref="PackageCategory.PersonalPlan"/>;
+    /// must be null for Protocol and WorkInstruction packages.
+    /// </summary>
+    public Guid? ClientId { get; set; }
+
     public bool IsPublished { get; set; }
 
     public bool RequiresConfirmation { get; set; }
@@ -26,4 +37,9 @@ public sealed class Package
     public DateTimeOffset UpdatedAt { get; set; }
 
     public ICollection<Document> Documents { get; set; } = [];
+
+    /// <summary>
+    /// Navigation property to the associated client (only for PersonalPlan packages).
+    /// </summary>
+    public Client? Client { get; set; }
 }

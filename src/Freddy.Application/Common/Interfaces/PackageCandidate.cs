@@ -1,3 +1,5 @@
+using Freddy.Application.Entities;
+
 namespace Freddy.Application.Common.Interfaces;
 
 /// <summary>
@@ -8,4 +10,7 @@ public sealed record PackageCandidate(
     string Title,
     string Description,
     IReadOnlyList<string> Tags,
-    IReadOnlyList<string> Synonyms);
+    IReadOnlyList<string> Synonyms,
+    string Content = "",
+    IReadOnlyList<string>? DocumentNames = null,
+    PackageCategory Category = PackageCategory.Protocol);
