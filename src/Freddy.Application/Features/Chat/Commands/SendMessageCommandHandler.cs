@@ -433,8 +433,11 @@ public sealed class SendMessageCommandHandler(
 
                     string titles = string.Join(", ", packages.Select(p => $"**{p.Title}**"));
                     string noun = packages.Count == 1 ? categoryName.ToLower() : $"{categoryName.ToLower()}s";
+                    string followUp = packages.Count == 1
+                        ? $"\n\nWil je meer informatie over {packages[0].Title}?"
+                        : $"\n\nWelk{(intent.Category == PackageCategory.Protocol ? "" : "e")} {categoryName.ToLower()} wil je meer over weten?";
                     return new AssistantResponse(
-                        $"Er {(packages.Count == 1 ? "is" : "zijn")} momenteel **{packages.Count}** {noun}: {titles}.");
+                        $"Er {(packages.Count == 1 ? "is" : "zijn")} momenteel **{packages.Count}** {noun}: {titles}.{followUp}");
                 }
 
             case OverviewQueryType.ListByCategory:
@@ -455,7 +458,11 @@ public sealed class SendMessageCommandHandler(
                     }
 
                     string list = string.Join("\n", packages.Select(p => $"- **{p.Title}** \u2014 {p.Description}"));
-                    return new AssistantResponse($"Dit zijn de beschikbare {categoryName.ToLower()}s:\n\n{list}");
+                    string countLine = packages.Count == 1 ? string.Empty : $"Er zijn **{packages.Count}** {categoryName.ToLower()}s beschikbaar.\n\n";
+                    string followUpList = packages.Count == 1
+                        ? $"\n\nWil je meer informatie over {packages[0].Title}?"
+                        : $"\n\nWelk{(intent.Category == PackageCategory.Protocol ? "" : "e")} {categoryName.ToLower()} wil je meer over weten?";
+                    return new AssistantResponse($"{countLine}Dit zijn de beschikbare {categoryName.ToLower()}s:\n\n{list}{followUpList}");
                 }
 
             case OverviewQueryType.ListAll:
@@ -485,7 +492,7 @@ public sealed class SendMessageCommandHandler(
                         }
                     }
 
-                    return new AssistantResponse(sb.ToString().TrimEnd());
+                    return new AssistantResponse(sb.ToString().TrimEnd() + "\n\nOver welk pakket wil je meer weten?");
                 }
 
             case OverviewQueryType.PersonalPlansForClient:

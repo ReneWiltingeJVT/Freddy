@@ -7,14 +7,18 @@ namespace Freddy.Infrastructure.AI;
 
 /// <summary>
 /// Deterministic overview query detector.
-/// Recognises count/list questions about package categories and personal client plans.
+/// Recognises count/list/existence questions about package categories and personal client plans.
 /// Runs in &lt;1ms — no LLM calls.
 ///
 /// Supported patterns (Dutch):
-///   "hoeveel protocollen zijn er?"     → CountByCategory(Protocol)
-///   "welke werkinstructies zijn er?"   → ListByCategory(WorkInstruction)
-///   "welke plannen zijn er voor meneer van het Hout?" → PersonalPlansForClient
-///   "hoeveel pakketten zijn er?"       → CountByCategory / ListAll
+///   "hoeveel protocollen zijn er?"           → CountByCategory(Protocol)
+///   "welke werkinstructies zijn er?"         → ListByCategory(WorkInstruction)
+///   "zijn er protocollen beschikbaar?"       → ListByCategory(Protocol)
+///   "is er een protocol?"                    → ListByCategory(Protocol)
+///   "ken je alle protocollen?"               → ListByCategory(Protocol)
+///   "hebben jullie werkinstructies?"         → ListByCategory(WorkInstruction)
+///   "welke plannen zijn er voor meneer X?"   → PersonalPlansForClient
+///   "hoeveel pakketten zijn er?"             → CountByCategory / ListAll
 /// </summary>
 public sealed partial class OverviewQueryDetector(ILogger<OverviewQueryDetector> logger) : IOverviewQueryDetector
 {
@@ -22,8 +26,12 @@ public sealed partial class OverviewQueryDetector(ILogger<OverviewQueryDetector>
     [GeneratedRegex(@"\b(hoeveel|aantal)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex CountPattern();
 
-    [GeneratedRegex(@"\b(welke|alle|overzicht|geef\s+me|toon|laat\s+zien|wat\s+zijn)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"\b(welke|alle|overzicht|geef\s+me|toon|laat\s+zien|wat\s+zijn|ken\s+je|ken\s+jij|kent\s+u|ken\s+u|laat\s+me)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ListPattern();
+
+    // Existence/availability intent: "zijn er X?", "is er X?", "beschikbaar?", "hebben jullie X?", "heb je X?"
+    [GeneratedRegex(@"\b(zijn\s+er|is\s+er|zijn\s+er\s+nog|beschikbaar|aanwezig|is\s+er\s+een|zijn\s+er\s+een|hebben\s+(jullie|wij|we|jij|je)|heb\s+(je|jij|u)\s+(ook\s+)?(een\s+)?|bestaat\s+er|bestaan\s+er)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex ExistencePattern();
 
     // ── Category recognition ────────────────────────────────────────────
     [GeneratedRegex(@"\b(protocol|protocollen|protocols)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
@@ -59,8 +67,9 @@ public sealed partial class OverviewQueryDetector(ILogger<OverviewQueryDetector>
 
         bool isCount = CountPattern().IsMatch(message);
         bool isList = ListPattern().IsMatch(message);
+        bool isExistence = ExistencePattern().IsMatch(message);
 
-        if (!isCount && !isList)
+        if (!isCount && !isList && !isExistence)
         {
             return OverviewQueryIntent.None;
         }

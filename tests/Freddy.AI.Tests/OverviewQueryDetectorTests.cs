@@ -100,6 +100,49 @@ public sealed class OverviewQueryDetectorTests
         result.ClientNameHint.Should().Contain("Hout");
     }
 
+    // ── Existence / availability queries ─────────────────────────────────
+
+    [Theory]
+    [InlineData("zijn er protocollen beschikbaar?")]
+    [InlineData("zijn er nog protocollen beschikbaar?")]
+    [InlineData("is er een protocol?")]
+    [InlineData("bestaat er een protocol?")]
+    [InlineData("hebben jullie protocollen?")]
+    [InlineData("heb je een protocol?")]
+    public void Detect_ExistenceQueryProtocol_ReturnsListByCategory(string input)
+    {
+        OverviewQueryIntent result = _detector.Detect(input);
+
+        result.IsOverview.Should().BeTrue();
+        result.QueryType.Should().Be(OverviewQueryType.ListByCategory);
+        result.Category.Should().Be(PackageCategory.Protocol);
+    }
+
+    [Theory]
+    [InlineData("zijn er werkinstructies beschikbaar?")]
+    [InlineData("hebben jullie werkinstructies?")]
+    [InlineData("is er een werkinstructie?")]
+    public void Detect_ExistenceQueryWorkInstruction_ReturnsListByCategory(string input)
+    {
+        OverviewQueryIntent result = _detector.Detect(input);
+
+        result.IsOverview.Should().BeTrue();
+        result.QueryType.Should().Be(OverviewQueryType.ListByCategory);
+        result.Category.Should().Be(PackageCategory.WorkInstruction);
+    }
+
+    [Theory]
+    [InlineData("zijn er pakketten beschikbaar?")]
+    [InlineData("heb je een pakket?")]
+    [InlineData("bestaan er pakketten?")]
+    public void Detect_ExistenceQueryPackage_ReturnsListAll(string input)
+    {
+        OverviewQueryIntent result = _detector.Detect(input);
+
+        result.IsOverview.Should().BeTrue();
+        result.QueryType.Should().Be(OverviewQueryType.ListAll);
+    }
+
     // ── Non-overview messages → None ──────────────────────────────────────
 
     [Theory]
