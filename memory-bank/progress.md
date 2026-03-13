@@ -81,9 +81,39 @@
 - 116 tests passing (88 existing + 28 new)
 - Branches: `plan/mvp-retrieval-personal-plans-redesign` (docs), `feature/mvp-retrieval-redesign` (code)
 
+### Phase 13 — Retrieval Improvements (COMPLETE)
+
+- **OverviewQueryDetector**: Deterministic Dutch regex detector for 5 query types (count/list/protocol/werkinstructie/plan/listAll). Bypasses routing pipeline entirely.
+- **Graceful LLM fallback**: CompositePackageRouter now handles `IsServiceUnavailable` at both disambiguation and zero-match recovery stages — never surfaces to users
+- **N+1 elimination**: Single `GetNamesByPackageIdsAsync` batch query replaces N per-package calls
+- **PendingClientId persistence**: Client detected in turn 1 persists to DB, available in turn 2+
+- **LLM context enrichment**: OllamaPackageRouter now includes top-5 tags and 120-char content snippet in disambiguation prompts
+- **`GetAllPublishedByCategoryAsync`**: New repository method for category-scoped package queries
+- **Switch fix**: `ConversationPendingState.None` now correctly routes to `RouteAndBuildResponseAsync`
+- 141 tests passing (68 AI + 73 Application)
+- Branch: `feature/freddy-retrieval-improvement`
+
 ## What Works
 
 - Chat: Create conversation, send messages, AI responds with package routing, documents included in responses
+- Chat: AI unavailability at routing level handled gracefully — suggestions or top match returned instead of error
+- Chat: Small talk detection with Dutch template responses (greeting, thanks, farewell, help intent, confusion)
+- Chat: Client detection — mentions of client names/aliases scope retrieval to include personal plans
+- Chat: Client context persists across conversation turns (PendingClientId in DB)
+- Chat: Scoped retrieval — PersonalPlan packages only shown when client detected, general packages always included
+- Chat: Zero-match recovery with top-3 package suggestions (or deterministic overview answer for count/list questions)
+- Chat: Category boost — PersonalPlan packages get +0.1 scoring boost
+- Chat: Overview questions (hoeveel/welke/voor meneer X) answered without LLM call
+- Packages: Full admin CRUD with publish lifecycle, categories (Protocol/WorkInstruction/PersonalPlan)
+- Clients: Full admin CRUD with display names and aliases
+- Documents: Full admin CRUD + file upload (multipart, 50MB limit) nested under packages
+- Audit logging: Infrastructure in place (entity, repository, EF config)
+- Auth: API key middleware for admin routes
+- AI: Ollama package classification, Semantic Kernel chat completion (Qwen 2.5 1.5B)
+- Frontend (Chat): React chat interface with real-time updates
+- Frontend (Backoffice): Package list, create/edit, detail view with document management and file upload
+- Static files: Uploaded documents served via UseStaticFiles
+- Mock data: 3 published packages (Voedselbank, Medicatie in Beheer, Valpreventie) with documents
 - Chat: AI unavailability surfaced as user-friendly Dutch message
 - Chat: Small talk detection with Dutch template responses (greeting, thanks, farewell, help intent, confusion)
 - Chat: Client detection — mentions of client names/aliases scope retrieval to include personal plans

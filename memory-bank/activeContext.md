@@ -2,7 +2,64 @@
 
 ## Current Work Focus
 
-Phase 12 (MVP Retrieval Redesign) — implementation complete on branch `feature/mvp-retrieval-redesign`. Added package categories (Protocol/WorkInstruction/PersonalPlan), client entity with CRUD, client detection in chat, scoped retrieval (personal plans filtered by client), category boost for PersonalPlan packages, audit logging infrastructure, and LLM zero-match recovery with top-3 suggestions.
+Phase 13 (Retrieval Improvements) — implementation complete and pushed on branch `feature/freddy-retrieval-improvement`. All 141 tests passing. Ready for PR review.
+
+## Recent Changes (Phase 13 — Retrieval Improvements)
+
+### Overview Query Fast-Path (no LLM)
+
+- **`IOverviewQueryDetector`**: Interface + `OverviewQueryType` enum (None/CountByCategory/ListByCategory/PersonalPlansForClient/ListAll) + `OverviewQueryIntent` record with QueryType, Category, ClientNameHint
+- **`OverviewQueryDetector`**: Regex-based Dutch detector using `[GeneratedRegex]` source generators. Handles count/list/protocol/werkinstructie/plan/package queries deterministically
+- **`SendMessageCommandHandler`**: Step 3 now calls `overviewQueryDetector.Detect()` before pending-state dispatch. `TryHandleOverviewQueryAsync` provides formatted Dutch responses for all 4 query types
+- **`CategoryDisplayName()`**: Static helper mapping `PackageCategory` to Dutch display names
+
+### Graceful LLM Fallback
+
+- **`CompositePackageRouter`**: When Ollama returns `IsServiceUnavailable` during disambiguation → returns top fast-path candidate with `NeedsConfirmation = true`. During zero-match recovery → returns top-3 suggestions. `IsServiceUnavailable` no longer surfaces to users.
+
+### N+1 Elimination
+
+- **`IDocumentRepository.GetNamesByPackageIdsAsync`**: New method returns `Dictionary<Guid, List<string>>` for a batch of package IDs
+- **`DocumentRepository`**: Implemented with single `WHERE PackageId IN (...)` EF Core query
+- **`SendMessageCommandHandler`**: Replaced per-package `GetByPackageIdAsync` loop with single batch call
+
+### PendingClientId Persistence
+
+- **`IConversationRepository.SetPendingClientIdAsync`**: New method persists detected client across conversation turns
+- **`ConversationRepository`**: Implemented with `ExecuteUpdateAsync`
+- **`SendMessageCommandHandler`**: Reads `conversation.PendingClientId` as fallback when no client in current message; calls `SetPendingClientIdAsync` when new client detected
+
+### LLM Context Enrichment
+
+- **`OllamaPackageRouter.FormatCandidates()`**: Now includes top 5 tags and first 120 chars of content in addition to title/description
+
+### Repository Extension
+
+- **`IPackageRepository.GetAllPublishedByCategoryAsync`**: New method for category-filtered queries
+- **`PackageRepository`**: Implemented with `WHERE IsPublished AND Category = X ORDER BY Title`
+
+### Test Coverage
+
+- **`OverviewQueryDetectorTests.cs`**: 23 new tests covering all query types + non-overview messages (Dutch)
+- **`CompositePackageRouterTests.cs`**: 2 new graceful fallback tests with `HttpRequestException` mocking
+- **`SendMessageCommandHandlerTests.cs`**: Updated constructor with `IOverviewQueryDetector` mock; default `GetNamesByPackageIdsAsync` mock; updated `Handle_ServiceUnavailable` test to match new user-friendly fallback behavior
+- **Total: 141 tests, all passing**
+
+## Build & Test Status
+
+- **Build**: Application + Infrastructure: 0 errors, 0 warnings
+- **Tests**: 141/141 passed (68 AI + 73 Application)
+- **Branch**: `feature/freddy-retrieval-improvement` pushed to origin
+
+## Next Steps
+
+- Create PR: `feat: improve package retrieval — overview queries, LLM fallback resilience, client context persistence`
+- PR review and merge
+- Phase 14: User authentication beyond API key
+- Phase 14: Integration tests for overview query responses
+- SmallTalkDetector: Consider removing "ik heb een vraag" from `HelpIntentPhrases` (too broad — would swallow legitimate questions if user says exactly that phrase, though compound phrases like "ik heb een vraag over wassen" are safe due to length check)
+
+
 
 ## Recent Changes (Phase 12 — MVP Retrieval Redesign)
 
