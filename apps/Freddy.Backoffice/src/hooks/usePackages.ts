@@ -20,6 +20,7 @@ const packageKey = (id: string) => ['packages', id] as const;
 export function usePackages(params?: {
   search?: string;
   isPublished?: boolean;
+  category?: string;
 }) {
   return useQuery({
     queryKey: [...PACKAGES_KEY, params],
