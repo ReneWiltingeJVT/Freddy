@@ -2,7 +2,31 @@
 
 ## Current Work Focus
 
-Phase 13 (Retrieval Improvements) — implementation complete and pushed on branch `feature/freddy-retrieval-improvement`. All 141 tests passing. Ready for PR review.
+Phase 13 (Retrieval Improvements) — implementation complete and pushed on branch `feature/freddy-retrieval-improvement`. Follow-up fix (`fix: detect existence queries`) also committed. All tests passing (153 total). Ready for PR review.
+
+## Recent Changes (Post-Phase 13 — Existence Query Fix)
+
+### Existence Query Detection (commit `922ddfc`)
+
+- **`OverviewQueryDetector`**: Added `ExistencePattern` regex matching `zijn\s+er`, `is\s+er`, `beschikbaar`, `aanwezig`, `hebben\s+(jullie|wij|we|jij|je)`, `heb\s+(je|jij|u)`, `bestaat\s+er`, `bestaan\s+er`. Guard updated to `!isCount && !isList && !isExistence`.
+- **`ListPattern`** extended with `ken\s+je`, `ken\s+jij`, `kent\s+u`, `ken\s+u`, `laat\s+me`
+- All three overview response builders in `SendMessageCommandHandler.TryHandleOverviewQueryAsync` now include follow-up guidance:
+  - `CountByCategory` → appends "Welk protocol wil je meer over weten?"
+  - `ListByCategory` → prepends count line + appends "Welk protocol wil je meer over weten?"
+  - `ListAll` → appends "Over welk pakket wil je meer weten?"
+- 12 new AI tests; 80 AI tests total + 73 Application tests = **153 total**
+
+### Live-tested conversation flow
+
+| Query | Result |
+|---|---|
+| "zijn er protocollen beschikbaar?" | ListByCategory(Protocol) — 3 protocols listed + follow-up |
+| "hoeveel protocollen zijn er?" | CountByCategory(Protocol) + follow-up |
+| "welke protocollen zijn er?" | ListByCategory(Protocol) + follow-up |
+| "Protocol Agressie" (follow-up turn) | Full content of Protocol Agressie |
+
+### Known edge case (low risk)
+"wat is het protocol als ik beschikbaar ben?" → `isExistence=true` (beschikbaar) + `isProtocol=true` → returns `ListByCategory(Protocol)` as false positive. Unlikely in practice.
 
 ## Recent Changes (Phase 13 — Retrieval Improvements)
 
@@ -48,8 +72,8 @@ Phase 13 (Retrieval Improvements) — implementation complete and pushed on bran
 ## Build & Test Status
 
 - **Build**: Application + Infrastructure: 0 errors, 0 warnings
-- **Tests**: 141/141 passed (68 AI + 73 Application)
-- **Branch**: `feature/freddy-retrieval-improvement` pushed to origin
+- **Tests**: 153/153 passed (80 AI + 73 Application)
+- **Branch**: `feature/freddy-retrieval-improvement` pushed to origin (2 commits ahead after existence-query fix)
 
 ## Next Steps
 

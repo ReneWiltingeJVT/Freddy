@@ -133,7 +133,7 @@
 
 ## Known Issues
 
-- None currently blocking
+- Edge case: "wat is het protocol als ik beschikbaar ben?" triggers `ExistencePattern` + `isProtocol` → false ListByCategory. Low risk in practice.
 
 ## What's Left to Build
 
