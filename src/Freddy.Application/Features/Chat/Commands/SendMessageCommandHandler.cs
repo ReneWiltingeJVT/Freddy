@@ -15,6 +15,7 @@ public sealed class SendMessageCommandHandler(
     IPackageRouter packageRouter,
     ISmallTalkDetector smallTalkDetector,
     IClientDetector clientDetector,
+    IOverviewQueryDetector overviewQueryDetector,
     ILogger<SendMessageCommandHandler> logger) : IRequestHandler<SendMessageCommand, Result<MessageDto>>
 {
     private const double HighConfidenceThreshold = 0.8;
@@ -100,7 +101,34 @@ public sealed class SendMessageCommandHandler(
                 smallTalkMessage.CreatedAt));
         }
 
-        // 3. Dispatch based on pending state
+        // 4. Overview query fast-path: answer count/list questions without full routing
+        AssistantResponse? overviewResponse = await TryHandleOverviewQueryAsync(
+            conversation, trimmedContent, cancellationToken).ConfigureAwait(false);
+
+        if (overviewResponse is not null)
+        {
+            logger.LogInformation(
+                "[OverviewQuery] Answered overview query for conversation {ConversationId}",
+                request.ConversationId);
+
+            var overviewMessage = new Message
+            {
+                Id = Guid.CreateVersion7(),
+                ConversationId = request.ConversationId,
+                Role = MessageRole.Assistant,
+                Content = overviewResponse.Content,
+                CreatedAt = DateTimeOffset.UtcNow,
+            };
+            _ = await conversationRepository.AddMessageAsync(overviewMessage, cancellationToken).ConfigureAwait(false);
+
+            return Result<MessageDto>.Success(new MessageDto(
+                overviewMessage.Id,
+                MapRole(overviewMessage.Role),
+                overviewMessage.Content,
+                overviewMessage.CreatedAt));
+        }
+
+        // 4. Dispatch based on pending state
         AssistantResponse response = conversation.PendingState switch
         {
             ConversationPendingState.AwaitingPackageConfirmation =>
@@ -110,7 +138,7 @@ public sealed class SendMessageCommandHandler(
             ConversationPendingState.AwaitingDocumentDelivery =>
                 await HandleDocumentConfirmationAsync(conversation, trimmedContent, cancellationToken)
                     .ConfigureAwait(false),
-
+            ConversationPendingState.AwaitingClientConfirmation => throw new NotImplementedException(),
             _ => await RouteAndBuildResponseAsync(conversation, trimmedContent, cancellationToken)
                     .ConfigureAwait(false),
         };
@@ -210,12 +238,9 @@ public sealed class SendMessageCommandHandler(
             IReadOnlyList<Document> documents = await documentRepository
                 .GetByPackageIdAsync(pendingId, cancellationToken).ConfigureAwait(false);
 
-            if (documents.Count == 0)
-            {
-                return new AssistantResponse("Er zijn momenteel geen documenten beschikbaar voor dit protocol.");
-            }
-
-            return BuildDocumentResponse(documents);
+            return documents.Count == 0
+                ? new AssistantResponse("Er zijn momenteel geen documenten beschikbaar voor dit protocol.")
+                : BuildDocumentResponse(documents);
         }
 
         if (isNo)
@@ -237,47 +262,58 @@ public sealed class SendMessageCommandHandler(
         string userInput,
         CancellationToken cancellationToken)
     {
-        // Try to detect a client name in the user message for scoped retrieval
+        // Detect client from current message
         ClientDetectionResult clientResult = await clientDetector
             .DetectAsync(userInput, cancellationToken).ConfigureAwait(false);
 
-        IReadOnlyList<Package> packages;
-        if (clientResult.IsDetected)
+        // If no client detected in this message, check if a client was already identified this conversation
+        Guid? effectiveClientId = clientResult.IsDetected ? clientResult.ClientId : conversation.PendingClientId;
+        string? effectiveClientName = clientResult.IsDetected ? clientResult.MatchedName : null;
+
+        // Persist newly detected client for multi-turn context
+        if (clientResult.IsDetected && conversation.PendingClientId != clientResult.ClientId)
         {
-            // Client detected: include personal plan packages scoped to this client
+            await conversationRepository
+                .SetPendingClientIdAsync(conversation.Id, clientResult.ClientId, cancellationToken)
+                .ConfigureAwait(false);
+
+            logger.LogInformation(
+                "[Routing] Persisting PendingClientId={ClientId} for conversation {ConversationId}",
+                clientResult.ClientId, conversation.Id);
+        }
+
+        IReadOnlyList<Package> packages;
+        if (effectiveClientId.HasValue)
+        {
+            // Client context: include personal plan packages scoped to this client
             // alongside all general published packages (Protocol + WorkInstruction)
             IReadOnlyList<Package> generalPackages = await packageRepository
                 .GetAllPublishedAsync(cancellationToken).ConfigureAwait(false);
             IReadOnlyList<Package> clientPackages = await packageRepository
-                .GetPublishedByClientIdAsync(clientResult.ClientId!.Value, cancellationToken).ConfigureAwait(false);
+                .GetPublishedByClientIdAsync(effectiveClientId.Value, cancellationToken).ConfigureAwait(false);
 
-            // Merge: general (non-PersonalPlan) + client-specific PersonalPlan
             var merged = new List<Package>(generalPackages.Where(p => p.Category != PackageCategory.PersonalPlan));
             merged.AddRange(clientPackages);
             packages = merged;
 
             logger.LogInformation(
-                "[Routing] Client detected: {ClientName} ({ClientId}) — using {General} general + {Personal} personal plan packages",
-                clientResult.MatchedName, clientResult.ClientId, merged.Count - clientPackages.Count, clientPackages.Count);
+                "[Routing] Client context: {ClientName} ({ClientId}) — {General} general + {Personal} personal plan packages",
+                effectiveClientName ?? "(from conversation)", effectiveClientId,
+                merged.Count - clientPackages.Count, clientPackages.Count);
         }
         else
         {
-            // No client detected: use all published packages (excluding personal plans)
             IReadOnlyList<Package> allPublished = await packageRepository
                 .GetAllPublishedAsync(cancellationToken).ConfigureAwait(false);
-            packages = allPublished.Where(p => p.Category != PackageCategory.PersonalPlan).ToList();
+            packages = [.. allPublished.Where(p => p.Category != PackageCategory.PersonalPlan)];
         }
 
         logger.LogInformation("[DEBUG] SendMessageHandler — Found {PackageCount} candidate packages", packages.Count);
 
-        // Load document names per package for scoring
-        Dictionary<Guid, List<string>> documentNamesByPackage = [];
-        foreach (Package pkg in packages)
-        {
-            IReadOnlyList<Document> docs = await documentRepository
-                .GetByPackageIdAsync(pkg.Id, cancellationToken).ConfigureAwait(false);
-            documentNamesByPackage[pkg.Id] = docs.Select(d => d.Name).ToList();
-        }
+        // Batch-load document names for all candidate packages in a single query (avoids N+1)
+        Dictionary<Guid, List<string>> documentNamesByPackage = await documentRepository
+            .GetNamesByPackageIdsAsync(packages.Select(p => p.Id), cancellationToken)
+            .ConfigureAwait(false);
 
         PackageCandidate[] candidates = [.. packages
             .Select(p => new PackageCandidate(
@@ -285,7 +321,7 @@ public sealed class SendMessageCommandHandler(
                 [.. p.Tags], [.. p.Synonyms],
                 p.Content,
                 documentNamesByPackage.TryGetValue(p.Id, out List<string>? names) ? names : [],
-                p.Category))];
+                p.Category)),];
 
         logger.LogInformation("[DEBUG] SendMessageHandler — Calling PackageRouter...");
         PackageRouterResult routerResult = await packageRouter
@@ -296,9 +332,15 @@ public sealed class SendMessageCommandHandler(
             routerResult.ChosenPackageId, routerResult.Confidence,
             routerResult.NeedsConfirmation, routerResult.IsServiceUnavailable);
 
+        // IsServiceUnavailable should no longer propagate (CompositePackageRouter handles it)
+        // but guard defensively in case of future routing implementations
         if (routerResult.IsServiceUnavailable)
         {
-            return new AssistantResponse("Sorry, de AI-service is momenteel niet beschikbaar. Probeer het over enkele minuten opnieuw.");
+            logger.LogWarning("[Routing] Received IsServiceUnavailable at handler level — returning suggestion fallback");
+            return routerResult.SuggestedPackages is { Count: > 0 }
+                ? BuildSuggestionResponse(routerResult.SuggestedPackages)
+                : new AssistantResponse(
+                "Ik kon geen passend antwoord vinden. Kun je je vraag anders formuleren of neem contact op met je leidinggevende.");
         }
 
         if (!routerResult.IsSuccessful || routerResult.ChosenPackageId is null)
@@ -306,12 +348,9 @@ public sealed class SendMessageCommandHandler(
             logger.LogInformation("No match (confidence: {Confidence:F2})", routerResult.Confidence);
 
             // Build suggestion response if router provided suggestions
-            if (routerResult.SuggestedPackages is { Count: > 0 })
-            {
-                return BuildSuggestionResponse(routerResult.SuggestedPackages);
-            }
-
-            return new AssistantResponse(
+            return routerResult.SuggestedPackages is { Count: > 0 }
+                ? BuildSuggestionResponse(routerResult.SuggestedPackages)
+                : new AssistantResponse(
                 "Sorry, ik kon geen antwoord vinden op je vraag. " +
                 "Kun je je vraag anders formuleren of neem contact op met je leidinggevende.");
         }
@@ -349,6 +388,176 @@ public sealed class SendMessageCommandHandler(
             package.Title, routerResult.Confidence, package.RequiresConfirmation);
         return await DeliverPackageAndMaybeOfferDocumentsAsync(conversation, package, cancellationToken).ConfigureAwait(false);
     }
+
+    // -----------------------------------------------------------------------
+    // Overview query handler
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Handles count/list/personal-plan overview queries without going through full routing.
+    /// Returns null if the message is not an overview query (caller should fall through to routing).
+    /// </summary>
+    private async Task<AssistantResponse?> TryHandleOverviewQueryAsync(
+        Conversation conversation,
+        string userInput,
+        CancellationToken cancellationToken)
+    {
+        OverviewQueryIntent intent = overviewQueryDetector.Detect(userInput);
+        if (!intent.IsOverview)
+        {
+            return null;
+        }
+
+        logger.LogInformation(
+            "[OverviewQuery] Detected {QueryType} (category={Category}, clientHint='{Hint}')",
+            intent.QueryType, intent.Category, intent.ClientNameHint);
+
+        switch (intent.QueryType)
+        {
+            case OverviewQueryType.CountByCategory:
+                {
+                    if (intent.Category is null)
+                    {
+                        break;
+                    }
+
+                    IReadOnlyList<Package> packages = await packageRepository
+                        .GetAllPublishedByCategoryAsync(intent.Category.Value, cancellationToken)
+                        .ConfigureAwait(false);
+
+                    string categoryName = CategoryDisplayName(intent.Category.Value);
+                    if (packages.Count == 0)
+                    {
+                        return new AssistantResponse($"Er zijn momenteel geen gepubliceerde {categoryName.ToLower()}s.");
+                    }
+
+                    string titles = string.Join(", ", packages.Select(p => $"**{p.Title}**"));
+                    string noun = packages.Count == 1 ? categoryName.ToLower() : $"{categoryName.ToLower()}s";
+                    return new AssistantResponse(
+                        $"Er {(packages.Count == 1 ? "is" : "zijn")} momenteel **{packages.Count}** {noun}: {titles}.");
+                }
+
+            case OverviewQueryType.ListByCategory:
+                {
+                    if (intent.Category is null)
+                    {
+                        break;
+                    }
+
+                    IReadOnlyList<Package> packages = await packageRepository
+                        .GetAllPublishedByCategoryAsync(intent.Category.Value, cancellationToken)
+                        .ConfigureAwait(false);
+
+                    string categoryName = CategoryDisplayName(intent.Category.Value);
+                    if (packages.Count == 0)
+                    {
+                        return new AssistantResponse($"Er zijn momenteel geen gepubliceerde {categoryName.ToLower()}s.");
+                    }
+
+                    string list = string.Join("\n", packages.Select(p => $"- **{p.Title}** \u2014 {p.Description}"));
+                    return new AssistantResponse($"Dit zijn de beschikbare {categoryName.ToLower()}s:\n\n{list}");
+                }
+
+            case OverviewQueryType.ListAll:
+                {
+                    IReadOnlyList<Package> allPublished = await packageRepository
+                        .GetAllPublishedAsync(cancellationToken)
+                        .ConfigureAwait(false);
+
+                    List<Package> generalPackages = [.. allPublished.Where(p => p.Category != PackageCategory.PersonalPlan)];
+
+                    if (generalPackages.Count == 0)
+                    {
+                        return new AssistantResponse("Er zijn momenteel geen gepubliceerde pakketten.");
+                    }
+
+                    IOrderedEnumerable<IGrouping<PackageCategory, Package>> grouped = generalPackages
+                        .GroupBy(p => p.Category)
+                        .OrderBy(g => (int)g.Key);
+
+                    var sb = new System.Text.StringBuilder("Dit zijn alle beschikbare pakketten:\n");
+                    foreach (IGrouping<PackageCategory, Package>? group in grouped)
+                    {
+                        _ = sb.Append($"\n**{CategoryDisplayName(group.Key)}s:**\n");
+                        foreach (Package p in group)
+                        {
+                            _ = sb.Append($"- {p.Title}\n");
+                        }
+                    }
+
+                    return new AssistantResponse(sb.ToString().TrimEnd());
+                }
+
+            case OverviewQueryType.PersonalPlansForClient:
+                {
+                    Guid? clientId = null;
+                    string? clientName = null;
+
+                    // Try to find the client from the extracted name hint
+                    if (intent.ClientNameHint is not null)
+                    {
+                        ClientDetectionResult hintResult = await clientDetector
+                            .DetectAsync(intent.ClientNameHint, cancellationToken).ConfigureAwait(false);
+
+                        if (hintResult.IsDetected)
+                        {
+                            clientId = hintResult.ClientId;
+                            clientName = hintResult.MatchedName;
+
+                            // Persist for future turns
+                            if (conversation.PendingClientId != clientId)
+                            {
+                                await conversationRepository
+                                    .SetPendingClientIdAsync(conversation.Id, clientId, cancellationToken)
+                                    .ConfigureAwait(false);
+                            }
+                        }
+                    }
+
+                    // Fall back to conversation's persisted client
+                    if (clientId is null && conversation.PendingClientId.HasValue)
+                    {
+                        clientId = conversation.PendingClientId;
+                    }
+
+                    if (clientId is null)
+                    {
+                        return new AssistantResponse(
+                            "Ik herkende geen bekende cliënt in je vraag. Kun je de naam van de cliënt vermelden?");
+                    }
+
+                    IReadOnlyList<Package> plans = await packageRepository
+                        .GetPublishedByClientIdAsync(clientId.Value, cancellationToken)
+                        .ConfigureAwait(false);
+
+                    if (plans.Count == 0)
+                    {
+                        return new AssistantResponse(
+                            $"Er zijn geen persoonlijke plannen beschikbaar voor {clientName ?? "deze cliënt"}.");
+                    }
+
+                    string planList = string.Join("\n", plans.Select(p => $"- **{p.Title}** \u2014 {p.Description}"));
+                    return new AssistantResponse(
+                        $"Dit zijn de persoonlijke plannen voor **{clientName ?? "de cliënt"}**:\n\n{planList}");
+                }
+
+            case OverviewQueryType.None:
+                break;
+            default:
+                break;
+        }
+
+        return null;
+    }
+
+    private static string CategoryDisplayName(PackageCategory category) => category switch
+    {
+        PackageCategory.Protocol => "Protocol",
+        PackageCategory.WorkInstruction => "Werkinstructie",
+        PackageCategory.PersonalPlan => "Persoonlijk plan",
+        _ => "Pakket",
+    };
+
 
     // -----------------------------------------------------------------------
     // Content builders
@@ -423,7 +632,7 @@ public sealed class SendMessageCommandHandler(
 
     private Task ClearPendingAsync(Guid conversationId, CancellationToken cancellationToken) =>
         conversationRepository.SetPendingStateAsync(
-            conversationId, null, ConversationPendingState.None, cancellationToken);
+            conversationId, packageId: null, ConversationPendingState.None, cancellationToken);
 
     // -----------------------------------------------------------------------
     // Helpers

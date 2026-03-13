@@ -23,10 +23,10 @@ public static class DependencyInjection
 
         // Repositories
         services.AddScoped<IConversationRepository, ConversationRepository>();
-        services.AddScoped<IPackageRepository, Persistence.Repositories.PackageRepository>();
-        services.AddScoped<IDocumentRepository, Persistence.Repositories.DocumentRepository>();
-        services.AddScoped<IClientRepository, Persistence.Repositories.ClientRepository>();
-        services.AddScoped<IAuditLogRepository, Persistence.Repositories.AuditLogRepository>();
+        services.AddScoped<IPackageRepository, PackageRepository>();
+        services.AddScoped<IDocumentRepository, DocumentRepository>();
+        services.AddScoped<IClientRepository, ClientRepository>();
+        services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 
         // AI — Ollama via Semantic Kernel
         string aiEndpoint = configuration["AI:Endpoint"] ?? "http://localhost:11434";
@@ -43,9 +43,10 @@ public static class DependencyInjection
             .AddOllamaChatCompletion(aiModelId, ollamaHttpClient);
 #pragma warning restore SKEXP0070
 
-        services.AddScoped<IChatService, AI.OllamaChatService>();
-        services.AddSingleton<ISmallTalkDetector, AI.SmallTalkDetector>();
-        services.AddScoped<IClientDetector, AI.ClientDetector>();
+        services.AddScoped<IChatService, OllamaChatService>();
+        services.AddSingleton<ISmallTalkDetector, SmallTalkDetector>();
+        services.AddSingleton<IOverviewQueryDetector, OverviewQueryDetector>();
+        services.AddScoped<IClientDetector, ClientDetector>();
 
         // Routing — two-lane strategy: fast-path (deterministic) + slow-path (Ollama disambiguation)
         services.AddOptions<RoutingOptions>()

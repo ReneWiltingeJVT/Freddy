@@ -26,6 +26,38 @@ public sealed class DocumentRepository(FreddyDbContext dbContext) : IDocumentRep
             .ConfigureAwait(false);
     }
 
+    public async Task<Dictionary<Guid, List<string>>> GetNamesByPackageIdsAsync(
+        IEnumerable<Guid> packageIds,
+        CancellationToken cancellationToken)
+    {
+        List<Guid> idList = [.. packageIds];
+        if (idList.Count == 0)
+        {
+            return [];
+        }
+
+        var rows = await dbContext.Documents
+            .AsNoTracking()
+            .Where(d => idList.Contains(d.PackageId))
+            .Select(d => new { d.PackageId, d.Name })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        Dictionary<Guid, List<string>> result = [];
+        foreach (var row in rows)
+        {
+            if (!result.TryGetValue(row.PackageId, out List<string>? names))
+            {
+                names = [];
+                result[row.PackageId] = names;
+            }
+
+            names.Add(row.Name);
+        }
+
+        return result;
+    }
+
     public async Task<Document> CreateAsync(Document document, CancellationToken cancellationToken)
     {
         dbContext.Documents.Add(document);

@@ -4,6 +4,7 @@ using Freddy.Infrastructure.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using Xunit;
 
 namespace Freddy.Application.Tests.Features.Chat.Commands;
@@ -23,7 +24,7 @@ public sealed class CompositePackageRouterTests
     public CompositePackageRouterTests()
     {
         // OllamaPackageRouter requires IChatCompletionService — mock it via NSubstitute
-        var chatCompletion = Substitute.For<Microsoft.SemanticKernel.ChatCompletion.IChatCompletionService>();
+        Microsoft.SemanticKernel.ChatCompletion.IChatCompletionService chatCompletion = Substitute.For<Microsoft.SemanticKernel.ChatCompletion.IChatCompletionService>();
         _ollamaRouter = new OllamaPackageRouter(chatCompletion, NullLogger<OllamaPackageRouter>.Instance);
 
         _router = new CompositePackageRouter(
@@ -86,7 +87,7 @@ public sealed class CompositePackageRouterTests
         // Arrange
         PackageCandidate candidate = CreateCandidate("Voedselbank");
         _fastPathRouter.Score(Arg.Any<string>(), Arg.Any<IReadOnlyList<PackageCandidate>>())
-            .Returns(Array.Empty<ScoredCandidate>());
+            .Returns([]);
 
         // Act
         PackageRouterResult result = await _router.RouteAsync("wat is het weer?", [candidate], CancellationToken.None);
@@ -135,5 +136,92 @@ public sealed class CompositePackageRouterTests
         // Key assertion: the router DID attempt to use Ollama (no direct return from fast-path)
         // Since the mock IChatCompletionService returns null, OllamaRouter will return fallback
         result.Should().NotBeNull();
+    }
+
+    // ── Graceful LLM fallback tests ──────────────────────────────────────
+
+    [Fact]
+    public async Task RouteAsync_OllamaUnavailableDuringDisambiguation_FallsBackToTopFastPathCandidate()
+    {
+        // Arrange — Ollama throws HttpRequestException during disambiguation
+        Microsoft.SemanticKernel.ChatCompletion.IChatCompletionService unavailableChat =
+            Substitute.For<Microsoft.SemanticKernel.ChatCompletion.IChatCompletionService>();
+
+        unavailableChat
+            .GetChatMessageContentsAsync(
+                Arg.Any<Microsoft.SemanticKernel.ChatCompletion.ChatHistory>(),
+                Arg.Any<Microsoft.SemanticKernel.PromptExecutionSettings>(),
+                Arg.Any<Microsoft.SemanticKernel.Kernel>(),
+                Arg.Any<CancellationToken>())
+            .ThrowsAsync(new HttpRequestException("Connection refused"));
+
+        OllamaPackageRouter unavailableOllama = new(unavailableChat, NullLogger<OllamaPackageRouter>.Instance);
+        CompositePackageRouter router = new(
+            _fastPathRouter,
+            unavailableOllama,
+            Options.Create(DefaultOptions),
+            NullLogger<CompositePackageRouter>.Instance);
+
+        PackageCandidate candidate1 = CreateCandidate("Voedselbank");
+        PackageCandidate candidate2 = CreateCandidate("Medicatie");
+
+        // Fast-path returns 2 ambiguous candidates
+        _fastPathRouter.Score(Arg.Any<string>(), Arg.Any<IReadOnlyList<PackageCandidate>>())
+            .Returns(
+            [
+                new ScoredCandidate(candidate1, 0.5), // highest score
+                new ScoredCandidate(candidate2, 0.4),
+            ]);
+
+        // Act
+        PackageRouterResult result = await router.RouteAsync(
+            "ambiguous question", [candidate1, candidate2], CancellationToken.None);
+
+        // Assert — falls back to top fast-path candidate, NOT service unavailable error
+        result.IsServiceUnavailable.Should().BeFalse("Ollama unavailability must not propagate to the user");
+        result.ChosenPackageId.Should().Be(candidate1.Id, "top fast-path candidate should be chosen");
+        result.NeedsConfirmation.Should().BeTrue("result was in ambiguity zone so confirmation is needed");
+    }
+
+    [Fact]
+    public async Task RouteAsync_OllamaUnavailableDuringZeroMatchRecovery_ReturnsSuggestionsNotError()
+    {
+        // Arrange — Ollama throws HttpRequestException during zero-match recovery
+        Microsoft.SemanticKernel.ChatCompletion.IChatCompletionService unavailableChat =
+            Substitute.For<Microsoft.SemanticKernel.ChatCompletion.IChatCompletionService>();
+
+        unavailableChat
+            .GetChatMessageContentsAsync(
+                Arg.Any<Microsoft.SemanticKernel.ChatCompletion.ChatHistory>(),
+                Arg.Any<Microsoft.SemanticKernel.PromptExecutionSettings>(),
+                Arg.Any<Microsoft.SemanticKernel.Kernel>(),
+                Arg.Any<CancellationToken>())
+            .ThrowsAsync(new HttpRequestException("Connection refused"));
+
+        OllamaPackageRouter unavailableOllama = new(unavailableChat, NullLogger<OllamaPackageRouter>.Instance);
+        CompositePackageRouter router = new(
+            _fastPathRouter,
+            unavailableOllama,
+            Options.Create(DefaultOptions),
+            NullLogger<CompositePackageRouter>.Instance);
+
+        PackageCandidate candidate1 = CreateCandidate("Voedselbank");
+        PackageCandidate candidate2 = CreateCandidate("Medicatie");
+
+        // Fast-path returns weak scores (below ambiguity floor) → triggers zero-match recovery
+        _fastPathRouter.Score(Arg.Any<string>(), Arg.Any<IReadOnlyList<PackageCandidate>>())
+            .Returns(
+            [
+                new ScoredCandidate(candidate1, 0.2),
+                new ScoredCandidate(candidate2, 0.1),
+            ]);
+
+        // Act
+        PackageRouterResult result = await router.RouteAsync(
+            "completely unrelated question", [candidate1, candidate2], CancellationToken.None);
+
+        // Assert — suggestions returned, NOT service unavailable error
+        result.IsServiceUnavailable.Should().BeFalse("Ollama unavailability must not propagate to the user");
+        result.ChosenPackageId.Should().BeNull();
     }
 }

@@ -84,4 +84,17 @@ public sealed class ConversationRepository(FreddyDbContext dbContext) : IConvers
                 cancellationToken)
             .ConfigureAwait(false);
     }
+
+    public async Task SetPendingClientIdAsync(
+        Guid conversationId,
+        Guid? clientId,
+        CancellationToken cancellationToken)
+    {
+        await dbContext.Conversations
+            .Where(c => c.Id == conversationId)
+            .ExecuteUpdateAsync(
+                s => s.SetProperty(c => c.PendingClientId, clientId),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
 }

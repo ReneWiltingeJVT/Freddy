@@ -21,4 +21,14 @@ public interface IConversationRepository
         Guid? packageId,
         ConversationPendingState state,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Persists the detected client ID on the conversation so subsequent turns
+    /// can use client context without re-detecting the client from the message.
+    /// Pass null to clear the pending client.
+    /// </summary>
+    Task SetPendingClientIdAsync(
+        Guid conversationId,
+        Guid? clientId,
+        CancellationToken cancellationToken);
 }

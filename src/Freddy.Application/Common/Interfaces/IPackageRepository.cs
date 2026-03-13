@@ -12,6 +12,11 @@ public interface IPackageRepository
 
     Task<IReadOnlyList<Package>> GetPublishedByClientIdAsync(Guid clientId, CancellationToken cancellationToken);
 
+    /// <summary>Returns all published packages filtered by category, ordered by title.</summary>
+    Task<IReadOnlyList<Package>> GetAllPublishedByCategoryAsync(
+        PackageCategory category,
+        CancellationToken cancellationToken);
+
     Task<IReadOnlyList<Package>> GetAllAsync(bool? isPublished, string? search, PackageCategory? category, CancellationToken cancellationToken);
 
     Task<Package> CreateAsync(Package package, CancellationToken cancellationToken);

@@ -110,7 +110,17 @@ public sealed class OllamaPackageRouter(
     private static string FormatCandidates(IReadOnlyList<PackageCandidate> candidates)
     {
         return string.Join("\n", candidates.Select(c =>
-            $"- ID: {c.Id} | Naam: {c.Title} | Beschrijving: {c.Description}"));
+        {
+            string tags = c.Tags.Count > 0
+                ? $" | Tags: {string.Join(", ", c.Tags.Take(5))}"
+                : string.Empty;
+
+            string contentSnippet = !string.IsNullOrWhiteSpace(c.Content)
+                ? $" | Inhoud: {(c.Content.Length > 120 ? c.Content[..120].TrimEnd() + "…" : c.Content)}"
+                : string.Empty;
+
+            return $"- ID: {c.Id} | Naam: {c.Title} | Beschrijving: {c.Description}{tags}{contentSnippet}";
+        }));
     }
 
     private PackageRouterResult ParseRouterResponse(string rawJson, IReadOnlyList<PackageCandidate> candidates)

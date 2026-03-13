@@ -8,6 +8,14 @@ public interface IDocumentRepository
 
     Task<IReadOnlyList<Document>> GetByPackageIdAsync(Guid packageId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Returns a mapping of package ID → document names for all provided package IDs.
+    /// Executes a single DB query instead of one per package (avoids N+1).
+    /// </summary>
+    Task<Dictionary<Guid, List<string>>> GetNamesByPackageIdsAsync(
+        IEnumerable<Guid> packageIds,
+        CancellationToken cancellationToken);
+
     Task<Document> CreateAsync(Document document, CancellationToken cancellationToken);
 
     Task<Document> UpdateAsync(Document document, CancellationToken cancellationToken);

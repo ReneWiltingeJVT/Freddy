@@ -52,6 +52,18 @@ public sealed class PackageRepository(FreddyDbContext dbContext) : IPackageRepos
             .ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<Package>> GetAllPublishedByCategoryAsync(
+        PackageCategory category,
+        CancellationToken cancellationToken)
+    {
+        return await dbContext.Packages
+            .AsNoTracking()
+            .Where(p => p.IsPublished && p.Category == category)
+            .OrderBy(p => p.Title)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     public async Task<IReadOnlyList<Package>> GetAllAsync(bool? isPublished, string? search, PackageCategory? category, CancellationToken cancellationToken)
     {
         IQueryable<Package> query = dbContext.Packages.AsNoTracking();

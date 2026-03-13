@@ -112,8 +112,27 @@ public sealed class CompositePackageRouter(
 
             PackageCandidate[] narrowedCandidates = [.. ambiguousCandidates.Select(s => s.Candidate)];
 
-            return await ollamaRouter.RouteAsync(userMessage, narrowedCandidates, cancellationToken)
+            PackageRouterResult ollamaResult = await ollamaRouter
+                .RouteAsync(userMessage, narrowedCandidates, cancellationToken)
                 .ConfigureAwait(false);
+
+            // LLM unavailable: fall back to the top fast-path candidate with confirmation
+            if (ollamaResult.IsServiceUnavailable)
+            {
+                logger.LogWarning(
+                    "[Routing] Ollama unavailable during disambiguation — falling back to top fast-path candidate: {Package} (score={Score:F2})",
+                    top.Candidate.Title, top.Score);
+
+                return new PackageRouterResult
+                {
+                    ChosenPackageId = top.Candidate.Id,
+                    Confidence = top.Score,
+                    NeedsConfirmation = true,
+                    Reason = $"Mogelijke match (AI niet beschikbaar): {top.Candidate.Title}",
+                };
+            }
+
+            return ollamaResult;
         }
 
         // No candidates above ambiguity floor → LLM zero-match recovery
@@ -152,7 +171,9 @@ public sealed class CompositePackageRouter(
 
             if (llmResult.IsServiceUnavailable)
             {
-                return llmResult;
+                logger.LogWarning(
+                    "[Routing] Ollama unavailable during zero-match recovery — returning suggestions from fast-path");
+                return CreateSuggestionResult(scored);
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -169,7 +190,7 @@ public sealed class CompositePackageRouter(
     /// </summary>
     private PackageRouterResult CreateSuggestionResult(IReadOnlyList<ScoredCandidate> scored)
     {
-        IReadOnlyList<ScoredCandidate> top3 = scored.Take(3).ToList();
+        IReadOnlyList<ScoredCandidate> top3 = [.. scored.Take(3)];
 
         if (top3.Count == 0)
         {
@@ -186,7 +207,7 @@ public sealed class CompositePackageRouter(
             Confidence = 0.0,
             NeedsConfirmation = false,
             Reason = "Geen directe match gevonden.",
-            SuggestedPackages = top3.Select(s => new SuggestedPackage(s.Candidate.Id, s.Candidate.Title, s.Candidate.Description)).ToList(),
+            SuggestedPackages = [.. top3.Select(s => new SuggestedPackage(s.Candidate.Id, s.Candidate.Title, s.Candidate.Description))],
         };
     }
 
