@@ -12,12 +12,7 @@ public sealed class GetClientQueryHandler(
     public async Task<Result<ClientDto>> Handle(GetClientQuery request, CancellationToken cancellationToken)
     {
         Client? client = await clientRepository.GetByIdAsync(request.Id, cancellationToken).ConfigureAwait(false);
-        if (client is null)
-        {
-            return Result<ClientDto>.NotFound($"Client {request.Id} not found.");
-        }
-
-        return Result<ClientDto>.Success(MapToDto(client));
+        return client is null ? Result<ClientDto>.NotFound($"Client {request.Id} not found.") : Result<ClientDto>.Success(MapToDto(client));
     }
 
     private static ClientDto MapToDto(Client c) => new(

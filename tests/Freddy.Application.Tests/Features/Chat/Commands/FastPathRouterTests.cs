@@ -222,11 +222,11 @@ public sealed class FastPathRouterTests
         // Arrange — two identical candidates, one PersonalPlan
         PackageCandidate protocol = new(
             Guid.CreateVersion7(), "Medicatiebeheer", "Protocol voor medicatie",
-            ["medicatie"], ["medicijnen"], "", null, PackageCategory.Protocol);
+            ["medicatie"], ["medicijnen"], "", DocumentNames: null, PackageCategory.Protocol);
 
         PackageCandidate personalPlan = new(
             Guid.CreateVersion7(), "Medicatiebeheer", "Protocol voor medicatie",
-            ["medicatie"], ["medicijnen"], "", null, PackageCategory.PersonalPlan);
+            ["medicatie"], ["medicijnen"], "", DocumentNames: null, PackageCategory.PersonalPlan);
 
         // Act
         IReadOnlyList<ScoredCandidate> protocolResults = _router.Score("medicatie", [protocol]);
@@ -244,7 +244,7 @@ public sealed class FastPathRouterTests
         // Arrange — PersonalPlan with exact title match (1.0) should stay at 1.0
         PackageCandidate personalPlan = new(
             Guid.CreateVersion7(), "Voedselbank", "Beschrijving",
-            [], [], "", null, PackageCategory.PersonalPlan);
+            [], [], "", DocumentNames: null, PackageCategory.PersonalPlan);
 
         // Act
         IReadOnlyList<ScoredCandidate> results = _router.Score("Voedselbank", [personalPlan]);
@@ -260,7 +260,7 @@ public sealed class FastPathRouterTests
         // Arrange — PersonalPlan that doesn't match at all should remain absent
         PackageCandidate personalPlan = new(
             Guid.CreateVersion7(), "XYZ Plan", "Onbekend onderwerp",
-            [], [], "", null, PackageCategory.PersonalPlan);
+            [], [], "", DocumentNames: null, PackageCategory.PersonalPlan);
 
         // Act
         IReadOnlyList<ScoredCandidate> results = _router.Score("Wat is het weer vandaag?", [personalPlan]);

@@ -22,6 +22,6 @@ public sealed class DeleteClientCommandHandler(
 
         logger.LogInformation("Client deleted: {ClientId} — {DisplayName}", client.Id, client.DisplayName);
 
-        return Result<bool>.Success(true);
+        return Result<bool>.Success(value: true);
     }
 }

@@ -13,8 +13,9 @@ public sealed class AdminApiKeyMiddlewareTests
 
     private static AdminApiKeyMiddleware CreateMiddleware(RequestDelegate next)
     {
-        var configuration = new ConfigurationBuilder()
+        IConfigurationRoot configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
+(StringComparer.Ordinal)
             {
                 ["Admin:ApiKey"] = ValidApiKey,
             })
@@ -31,7 +32,7 @@ public sealed class AdminApiKeyMiddlewareTests
     {
         // Arrange
         bool nextCalled = false;
-        var middleware = CreateMiddleware(_ => { nextCalled = true; return Task.CompletedTask; });
+        AdminApiKeyMiddleware middleware = CreateMiddleware(_ => { nextCalled = true; return Task.CompletedTask; });
         var context = new DefaultHttpContext();
         context.Request.Path = "/api/admin/packages";
         context.Request.Headers["X-Admin-Api-Key"] = ValidApiKey;
@@ -49,7 +50,7 @@ public sealed class AdminApiKeyMiddlewareTests
     {
         // Arrange
         bool nextCalled = false;
-        var middleware = CreateMiddleware(_ => { nextCalled = true; return Task.CompletedTask; });
+        AdminApiKeyMiddleware middleware = CreateMiddleware(_ => { nextCalled = true; return Task.CompletedTask; });
         var context = new DefaultHttpContext();
         context.Request.Path = "/api/admin/packages";
 
@@ -66,7 +67,7 @@ public sealed class AdminApiKeyMiddlewareTests
     {
         // Arrange
         bool nextCalled = false;
-        var middleware = CreateMiddleware(_ => { nextCalled = true; return Task.CompletedTask; });
+        AdminApiKeyMiddleware middleware = CreateMiddleware(_ => { nextCalled = true; return Task.CompletedTask; });
         var context = new DefaultHttpContext();
         context.Request.Path = "/api/admin/packages";
         context.Request.Headers["X-Admin-Api-Key"] = "wrong-key";
@@ -84,7 +85,7 @@ public sealed class AdminApiKeyMiddlewareTests
     {
         // Arrange
         bool nextCalled = false;
-        var middleware = CreateMiddleware(_ => { nextCalled = true; return Task.CompletedTask; });
+        AdminApiKeyMiddleware middleware = CreateMiddleware(_ => { nextCalled = true; return Task.CompletedTask; });
         var context = new DefaultHttpContext();
         context.Request.Path = "/api/v1/chat/conversations";
 
@@ -100,8 +101,8 @@ public sealed class AdminApiKeyMiddlewareTests
     public async Task InvokeAsync_AdminRoute_WithMissingConfig_Returns401()
     {
         // Arrange
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>())
+        IConfigurationRoot configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection([])
             .Build();
 
         bool nextCalled = false;

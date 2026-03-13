@@ -2,13 +2,13 @@
 
 using System.Globalization;
 using System.Text;
+using FluentValidation;
 using Freddy.Api.Middleware;
 using Freddy.Api.Services;
 using Freddy.Application.Behaviors;
 using Freddy.Application.Common.Interfaces;
 using Freddy.Application.Features.Chat.Commands;
 using Freddy.Infrastructure;
-using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;

@@ -6,11 +6,11 @@ public sealed class CreateClientCommandValidator : AbstractValidator<CreateClien
 {
     public CreateClientCommandValidator()
     {
-        RuleFor(x => x.DisplayName)
+        _ = RuleFor(x => x.DisplayName)
             .NotEmpty().WithMessage("Display name is required.")
             .MaximumLength(200).WithMessage("Display name must not exceed 200 characters.");
 
-        RuleFor(x => x.Aliases)
+        _ = RuleFor(x => x.Aliases)
             .NotNull().WithMessage("Aliases must not be null.");
     }
 }

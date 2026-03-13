@@ -20,7 +20,7 @@ public sealed class CreateDocumentCommandHandler(
             return Result<DocumentDto>.NotFound($"Package {request.PackageId} not found.");
         }
 
-        if (!Enum.TryParse<DocumentType>(request.Type, ignoreCase: true, out DocumentType documentType))
+        if (!Enum.TryParse(request.Type, ignoreCase: true, out DocumentType documentType))
         {
             return Result<DocumentDto>.ValidationError($"Invalid document type: {request.Type}. Valid types: Pdf, Steps, Link.");
         }

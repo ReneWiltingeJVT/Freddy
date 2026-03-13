@@ -157,17 +157,11 @@ public sealed class SmallTalkDetector(ILogger<SmallTalkDetector> logger) : ISmal
             return new SmallTalkResult(SmallTalkCategory.Thanks, Templates.Thanks);
         }
 
-        if (HelpIntentPhrases.Contains(normalized))
-        {
-            return new SmallTalkResult(SmallTalkCategory.HelpIntent, Templates.HelpIntent);
-        }
-
-        if (FarewellPhrases.Contains(normalized))
-        {
-            return new SmallTalkResult(SmallTalkCategory.Farewell, Templates.Farewell);
-        }
-
-        return ConfusionPhrases.Contains(normalized)
+        return HelpIntentPhrases.Contains(normalized)
+            ? new SmallTalkResult(SmallTalkCategory.HelpIntent, Templates.HelpIntent)
+            : FarewellPhrases.Contains(normalized)
+            ? new SmallTalkResult(SmallTalkCategory.Farewell, Templates.Farewell)
+            : ConfusionPhrases.Contains(normalized)
             ? new SmallTalkResult(SmallTalkCategory.GenericConfusion, Templates.GenericConfusion)
             : SmallTalkResult.NoMatch;
     }

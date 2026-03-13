@@ -19,7 +19,7 @@ public sealed class CreateClientCommandHandler(
         {
             Id = Guid.CreateVersion7(),
             DisplayName = request.DisplayName.Trim(),
-            Aliases = request.Aliases.Select(a => a.Trim().ToLowerInvariant()).ToList(),
+            Aliases = [.. request.Aliases.Select(a => a.Trim().ToLowerInvariant())],
             IsActive = true,
             CreatedAt = now,
             UpdatedAt = now,

@@ -25,7 +25,7 @@ public sealed class ClientDetectorTests
         {
             Id = Guid.CreateVersion7(),
             DisplayName = displayName,
-            Aliases = aliases.ToList(),
+            Aliases = [.. aliases],
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
@@ -155,7 +155,7 @@ public sealed class ClientDetectorTests
     public async Task DetectAsync_NoClients_ReturnsNoMatch()
     {
         _clientRepository.GetAllAsync(isActive: true, search: null, Arg.Any<CancellationToken>())
-            .Returns(Array.Empty<Client>());
+            .Returns([]);
 
         ClientDetectionResult result = await _detector.DetectAsync(
             "Een willekeurige vraag", CancellationToken.None);

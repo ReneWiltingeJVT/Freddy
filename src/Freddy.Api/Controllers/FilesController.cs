@@ -56,8 +56,8 @@ public sealed class FilesController(IWebHostEnvironment environment) : Controlle
         }
 
         string webRoot = environment.WebRootPath;
-        string relativePart = path.TrimStart('/').Replace('/', System.IO.Path.DirectorySeparatorChar);
-        string absolutePath = System.IO.Path.GetFullPath(System.IO.Path.Combine(webRoot, relativePart));
+        string relativePart = path.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
+        string absolutePath = Path.GetFullPath(Path.Combine(webRoot, relativePart));
 
         // Security – prevent path traversal outside of wwwroot
         if (!absolutePath.StartsWith(webRoot, StringComparison.OrdinalIgnoreCase))
@@ -78,12 +78,12 @@ public sealed class FilesController(IWebHostEnvironment environment) : Controlle
             });
         }
 
-        string extension = System.IO.Path.GetExtension(absolutePath);
+        string extension = Path.GetExtension(absolutePath);
         string contentType = ContentTypeMap.TryGetValue(extension, out string? mapped)
             ? mapped
             : "application/octet-stream";
 
-        string fileName = System.IO.Path.GetFileName(absolutePath);
+        string fileName = Path.GetFileName(absolutePath);
 
         // PhysicalFile with a fileDownloadName automatically adds
         // Content-Disposition: attachment; filename="..."

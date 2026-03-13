@@ -18,7 +18,7 @@ public sealed class LocalFileStorageService(
         string uniqueName = $"{Guid.CreateVersion7()}-{sanitizedName}";
         string directoryPath = Path.Combine(webRootPath, UploadFolder);
 
-        Directory.CreateDirectory(directoryPath);
+        _ = Directory.CreateDirectory(directoryPath);
 
         string filePath = Path.Combine(directoryPath, uniqueName);
 

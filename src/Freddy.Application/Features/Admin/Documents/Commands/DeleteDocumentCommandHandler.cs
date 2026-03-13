@@ -29,6 +29,6 @@ public sealed class DeleteDocumentCommandHandler(
 
         logger.LogInformation("Document deleted: {DocumentId}", document.Id);
 
-        return Result<bool>.Success(true);
+        return Result<bool>.Success(value: true);
     }
 }

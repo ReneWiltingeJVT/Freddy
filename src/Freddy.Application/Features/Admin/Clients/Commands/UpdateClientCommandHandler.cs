@@ -20,7 +20,7 @@ public sealed class UpdateClientCommandHandler(
         }
 
         client.DisplayName = request.DisplayName.Trim();
-        client.Aliases = request.Aliases.Select(a => a.Trim().ToLowerInvariant()).ToList();
+        client.Aliases = [.. request.Aliases.Select(a => a.Trim().ToLowerInvariant())];
         client.IsActive = request.IsActive;
         client.UpdatedAt = DateTimeOffset.UtcNow;
 

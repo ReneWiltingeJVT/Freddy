@@ -41,7 +41,11 @@ public sealed class GetConversationMessagesQueryHandler(
 
     private static IReadOnlyList<AttachmentDto>? DeserializeAttachments(string? json)
     {
-        if (string.IsNullOrEmpty(json)) return null;
+        if (string.IsNullOrEmpty(json))
+        {
+            return null;
+        }
+
         try
         {
             return JsonSerializer.Deserialize<List<AttachmentDto>>(json, JsonOptions);

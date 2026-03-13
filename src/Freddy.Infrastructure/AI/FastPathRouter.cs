@@ -97,7 +97,7 @@ public sealed class FastPathRouter(ILogger<FastPathRouter> logger) : IFastPathRo
 
         // Category boost: PersonalPlan packages get a small bonus to surface personal plans
         // when there's any match, making them easier to find during scoped retrieval.
-        if (highestScore > 0 && candidate.Category == Freddy.Application.Entities.PackageCategory.PersonalPlan)
+        if (highestScore > 0 && candidate.Category == Application.Entities.PackageCategory.PersonalPlan)
         {
             highestScore = Math.Min(1.0, highestScore + CategoryBoost);
         }
@@ -109,12 +109,9 @@ public sealed class FastPathRouter(ILogger<FastPathRouter> logger) : IFastPathRo
     {
         string normalizedTitle = Normalize(candidate.Title);
 
-        if (string.Equals(normalizedMessage, normalizedTitle, StringComparison.Ordinal))
-        {
-            return 1.0;
-        }
-
-        return normalizedTitle.Length > 3 && normalizedMessage.Contains(normalizedTitle, StringComparison.Ordinal)
+        return string.Equals(normalizedMessage, normalizedTitle, StringComparison.Ordinal)
+            ? 1.0
+            : normalizedTitle.Length > 3 && normalizedMessage.Contains(normalizedTitle, StringComparison.Ordinal)
             ? 0.7
             : 0.0;
     }
@@ -305,7 +302,7 @@ public sealed class FastPathRouter(ILogger<FastPathRouter> logger) : IFastPathRo
         input.Trim().ToLowerInvariant();
 
     private static string[] FilterStopwords(string[] words) =>
-        words.Where(w => !DutchStopwords.Contains(w)).ToArray();
+        [.. words.Where(w => !DutchStopwords.Contains(w))];
 
     /// <summary>
     /// Generates character bigrams for a word (e.g., "medicatie" → {"me","ed","di","ic","ca","at","ti","ie"}).
@@ -317,10 +314,10 @@ public sealed class FastPathRouter(ILogger<FastPathRouter> logger) : IFastPathRo
             return [];
         }
 
-        HashSet<string> bigrams = new(word.Length - 1);
+        HashSet<string> bigrams = new(word.Length - 1, StringComparer.Ordinal);
         for (int i = 0; i < word.Length - 1; i++)
         {
-            bigrams.Add(word.Substring(i, 2));
+            _ = bigrams.Add(word.Substring(i, 2));
         }
 
         return bigrams;
@@ -337,7 +334,7 @@ public sealed class FastPathRouter(ILogger<FastPathRouter> logger) : IFastPathRo
             return 0.0;
         }
 
-        int intersection = set1.Count(b => set2.Contains(b));
+        int intersection = set1.Count(set2.Contains);
         return 2.0 * intersection / (set1.Count + set2.Count);
     }
 }

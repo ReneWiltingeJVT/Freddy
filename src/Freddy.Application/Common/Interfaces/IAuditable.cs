@@ -1,5 +1,3 @@
-using Freddy.Application.Common.Interfaces;
-
 namespace Freddy.Application.Common.Interfaces;
 
 /// <summary>

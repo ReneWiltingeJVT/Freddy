@@ -8,26 +8,26 @@ public sealed class UpdateDocumentCommandValidator : AbstractValidator<UpdateDoc
 
     public UpdateDocumentCommandValidator()
     {
-        RuleFor(x => x.Id)
+        _ = RuleFor(x => x.Id)
             .NotEmpty().WithMessage("Document ID is required.");
 
-        RuleFor(x => x.Name)
+        _ = RuleFor(x => x.Name)
             .NotEmpty().WithMessage("Name is required.")
             .MaximumLength(200).WithMessage("Name must not exceed 200 characters.");
 
-        RuleFor(x => x.Description)
+        _ = RuleFor(x => x.Description)
             .MaximumLength(2000).WithMessage("Description must not exceed 2000 characters.");
 
-        RuleFor(x => x.Type)
+        _ = RuleFor(x => x.Type)
             .NotEmpty().WithMessage("Type is required.")
             .Must(type => ValidTypes.Contains(type, StringComparer.OrdinalIgnoreCase))
             .WithMessage("Type must be one of: Pdf, Steps, Link.");
 
-        RuleFor(x => x.FileUrl)
+        _ = RuleFor(x => x.FileUrl)
             .NotEmpty().When(x => x.Type is "Pdf" or "Link")
             .WithMessage("FileUrl is required for Pdf and Link document types.");
 
-        RuleFor(x => x.StepsContent)
+        _ = RuleFor(x => x.StepsContent)
             .NotEmpty().When(x => x.Type is "Steps")
             .WithMessage("StepsContent is required for Steps document type.");
     }

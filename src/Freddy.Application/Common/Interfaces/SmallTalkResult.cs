@@ -10,7 +10,7 @@ public sealed record SmallTalkResult(SmallTalkCategory Category, string? Templat
     /// <summary>
     /// Indicates that the message is not small talk and should proceed to routing.
     /// </summary>
-    public static SmallTalkResult NoMatch { get; } = new(SmallTalkCategory.None, null);
+    public static SmallTalkResult NoMatch { get; } = new(SmallTalkCategory.None, TemplateResponse: null);
 
     /// <summary>
     /// Whether a small talk category was detected.

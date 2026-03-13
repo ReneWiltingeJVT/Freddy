@@ -1,5 +1,3 @@
-using Freddy.Application.Entities;
-
 namespace Freddy.Application.Features.Admin.Documents.DTOs;
 
 /// <summary>
