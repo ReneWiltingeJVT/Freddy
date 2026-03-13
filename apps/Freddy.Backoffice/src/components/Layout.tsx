@@ -2,6 +2,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 
 const NAV_ITEMS = [
   { to: '/', label: 'Pakketten' },
+  { to: '/clients', label: 'Cliënten' },
 ] as const;
 
 export function Layout() {

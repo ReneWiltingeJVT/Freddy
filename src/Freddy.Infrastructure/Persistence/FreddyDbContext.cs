@@ -13,6 +13,10 @@ public sealed class FreddyDbContext(DbContextOptions<FreddyDbContext> options) :
 
     public DbSet<Document> Documents => Set<Document>();
 
+    public DbSet<Client> Clients => Set<Client>();
+
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder) =>
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(FreddyDbContext).Assembly);
 }

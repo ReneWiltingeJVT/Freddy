@@ -25,6 +25,8 @@ public static class DependencyInjection
         services.AddScoped<IConversationRepository, ConversationRepository>();
         services.AddScoped<IPackageRepository, Persistence.Repositories.PackageRepository>();
         services.AddScoped<IDocumentRepository, Persistence.Repositories.DocumentRepository>();
+        services.AddScoped<IClientRepository, Persistence.Repositories.ClientRepository>();
+        services.AddScoped<IAuditLogRepository, Persistence.Repositories.AuditLogRepository>();
 
         // AI — Ollama via Semantic Kernel
         string aiEndpoint = configuration["AI:Endpoint"] ?? "http://localhost:11434";
@@ -43,6 +45,7 @@ public static class DependencyInjection
 
         services.AddScoped<IChatService, AI.OllamaChatService>();
         services.AddSingleton<ISmallTalkDetector, AI.SmallTalkDetector>();
+        services.AddScoped<IClientDetector, AI.ClientDetector>();
 
         // Routing — two-lane strategy: fast-path (deterministic) + slow-path (Ollama disambiguation)
         services.AddOptions<RoutingOptions>()

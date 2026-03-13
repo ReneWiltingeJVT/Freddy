@@ -18,5 +18,16 @@ public sealed record PackageRouterResult
     /// </summary>
     public bool IsServiceUnavailable { get; init; }
 
+    /// <summary>
+    /// When no match is found (neither FastPath nor LLM), contains the top-3 weakly
+    /// scored packages as suggestions the user can browse.
+    /// </summary>
+    public IReadOnlyList<SuggestedPackage>? SuggestedPackages { get; init; }
+
     public bool IsSuccessful => ChosenPackageId.HasValue && Confidence >= 0.6;
 }
+
+/// <summary>
+/// A package suggestion shown to the user when no confident match was found.
+/// </summary>
+public sealed record SuggestedPackage(Guid Id, string Title, string Description);

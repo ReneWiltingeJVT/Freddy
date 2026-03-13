@@ -22,6 +22,103 @@ namespace Freddy.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Freddy.Application.Entities.AuditLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("action");
+
+                    b.Property<string>("Details")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("details");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entity_id");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("entity_type");
+
+                    b.Property<DateTimeOffset>("Timestamp")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("timestamp");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EntityType")
+                        .HasDatabaseName("ix_audit_logs_entity_type");
+
+                    b.HasIndex("Timestamp")
+                        .HasDatabaseName("ix_audit_logs_timestamp");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_audit_logs_user_id");
+
+                    b.ToTable("audit_logs", (string)null);
+                });
+
+            modelBuilder.Entity("Freddy.Application.Entities.Client", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.PrimitiveCollection<string[]>("Aliases")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("aliases");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("display_name");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Aliases")
+                        .HasDatabaseName("ix_clients_aliases");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Aliases"), "gin");
+
+                    b.HasIndex("DisplayName")
+                        .HasDatabaseName("ix_clients_display_name");
+
+                    b.HasIndex("IsActive")
+                        .HasDatabaseName("ix_clients_is_active");
+
+                    b.ToTable("clients", (string)null);
+                });
+
             modelBuilder.Entity("Freddy.Application.Entities.Conversation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -33,13 +130,18 @@ namespace Freddy.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<Guid?>("PendingClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pending_client_id");
+
                     b.Property<Guid?>("PendingPackageId")
                         .HasColumnType("uuid")
                         .HasColumnName("pending_package_id");
 
                     b.Property<int>("PendingState")
-                        .HasDefaultValue(0)
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
+                        .HasDefaultValue(0)
                         .HasColumnName("pending_state");
 
                     b.Property<string>("Title")
@@ -124,14 +226,14 @@ namespace Freddy.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("AttachmentsJson")
+                        .HasColumnType("text")
+                        .HasColumnName("attachments_json");
+
                     b.Property<string>("Content")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("content");
-
-                    b.Property<string?>("AttachmentsJson")
-                        .HasColumnType("text")
-                        .HasColumnName("attachments_json");
 
                     b.Property<Guid>("ConversationId")
                         .HasColumnType("uuid")
@@ -164,6 +266,16 @@ namespace Freddy.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<int>("Category")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("category");
+
+                    b.Property<Guid?>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
 
                     b.Property<string>("Content")
                         .IsRequired()
@@ -214,6 +326,12 @@ namespace Freddy.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Category")
+                        .HasDatabaseName("ix_packages_category");
+
+                    b.HasIndex("ClientId")
+                        .HasDatabaseName("ix_packages_client_id");
+
                     b.HasIndex("IsPublished")
                         .HasDatabaseName("ix_packages_is_published");
 
@@ -227,7 +345,10 @@ namespace Freddy.Infrastructure.Persistence.Migrations
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Tags"), "gin");
 
-                    b.ToTable("packages", (string)null);
+                    b.ToTable("packages", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_packages_category_client", "(category != 2 AND client_id IS NULL) OR (category = 2 AND client_id IS NOT NULL)");
+                        });
                 });
 
             modelBuilder.Entity("Freddy.Application.Entities.Document", b =>
@@ -250,6 +371,21 @@ namespace Freddy.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Conversation");
+                });
+
+            modelBuilder.Entity("Freddy.Application.Entities.Package", b =>
+                {
+                    b.HasOne("Freddy.Application.Entities.Client", "Client")
+                        .WithMany("Packages")
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Client");
+                });
+
+            modelBuilder.Entity("Freddy.Application.Entities.Client", b =>
+                {
+                    b.Navigation("Packages");
                 });
 
             modelBuilder.Entity("Freddy.Application.Entities.Conversation", b =>

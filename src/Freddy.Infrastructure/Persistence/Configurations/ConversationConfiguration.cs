@@ -37,6 +37,10 @@ public sealed class ConversationConfiguration : IEntityTypeConfiguration<Convers
             .HasColumnName("pending_package_id")
             .IsRequired(false);
 
+        builder.Property(c => c.PendingClientId)
+            .HasColumnName("pending_client_id")
+            .IsRequired(false);
+
         builder.Property(c => c.PendingState)
             .HasColumnName("pending_state")
             .HasConversion<int>()

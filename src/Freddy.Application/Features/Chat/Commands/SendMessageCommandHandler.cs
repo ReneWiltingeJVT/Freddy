@@ -14,6 +14,7 @@ public sealed class SendMessageCommandHandler(
     IDocumentRepository documentRepository,
     IPackageRouter packageRouter,
     ISmallTalkDetector smallTalkDetector,
+    IClientDetector clientDetector,
     ILogger<SendMessageCommandHandler> logger) : IRequestHandler<SendMessageCommand, Result<MessageDto>>
 {
     private const double HighConfidenceThreshold = 0.8;
@@ -236,13 +237,55 @@ public sealed class SendMessageCommandHandler(
         string userInput,
         CancellationToken cancellationToken)
     {
-        IReadOnlyList<Package> packages = await packageRepository
-            .GetAllPublishedAsync(cancellationToken).ConfigureAwait(false);
+        // Try to detect a client name in the user message for scoped retrieval
+        ClientDetectionResult clientResult = await clientDetector
+            .DetectAsync(userInput, cancellationToken).ConfigureAwait(false);
 
-        logger.LogInformation("[DEBUG] SendMessageHandler — Found {PackageCount} published packages", packages.Count);
+        IReadOnlyList<Package> packages;
+        if (clientResult.IsDetected)
+        {
+            // Client detected: include personal plan packages scoped to this client
+            // alongside all general published packages (Protocol + WorkInstruction)
+            IReadOnlyList<Package> generalPackages = await packageRepository
+                .GetAllPublishedAsync(cancellationToken).ConfigureAwait(false);
+            IReadOnlyList<Package> clientPackages = await packageRepository
+                .GetPublishedByClientIdAsync(clientResult.ClientId!.Value, cancellationToken).ConfigureAwait(false);
+
+            // Merge: general (non-PersonalPlan) + client-specific PersonalPlan
+            var merged = new List<Package>(generalPackages.Where(p => p.Category != PackageCategory.PersonalPlan));
+            merged.AddRange(clientPackages);
+            packages = merged;
+
+            logger.LogInformation(
+                "[Routing] Client detected: {ClientName} ({ClientId}) — using {General} general + {Personal} personal plan packages",
+                clientResult.MatchedName, clientResult.ClientId, merged.Count - clientPackages.Count, clientPackages.Count);
+        }
+        else
+        {
+            // No client detected: use all published packages (excluding personal plans)
+            IReadOnlyList<Package> allPublished = await packageRepository
+                .GetAllPublishedAsync(cancellationToken).ConfigureAwait(false);
+            packages = allPublished.Where(p => p.Category != PackageCategory.PersonalPlan).ToList();
+        }
+
+        logger.LogInformation("[DEBUG] SendMessageHandler — Found {PackageCount} candidate packages", packages.Count);
+
+        // Load document names per package for scoring
+        Dictionary<Guid, List<string>> documentNamesByPackage = [];
+        foreach (Package pkg in packages)
+        {
+            IReadOnlyList<Document> docs = await documentRepository
+                .GetByPackageIdAsync(pkg.Id, cancellationToken).ConfigureAwait(false);
+            documentNamesByPackage[pkg.Id] = docs.Select(d => d.Name).ToList();
+        }
 
         PackageCandidate[] candidates = [.. packages
-            .Select(p => new PackageCandidate(p.Id, p.Title, p.Description, [.. p.Tags], [.. p.Synonyms]))];
+            .Select(p => new PackageCandidate(
+                p.Id, p.Title, p.Description,
+                [.. p.Tags], [.. p.Synonyms],
+                p.Content,
+                documentNamesByPackage.TryGetValue(p.Id, out List<string>? names) ? names : [],
+                p.Category))];
 
         logger.LogInformation("[DEBUG] SendMessageHandler — Calling PackageRouter...");
         PackageRouterResult routerResult = await packageRouter
@@ -261,6 +304,13 @@ public sealed class SendMessageCommandHandler(
         if (!routerResult.IsSuccessful || routerResult.ChosenPackageId is null)
         {
             logger.LogInformation("No match (confidence: {Confidence:F2})", routerResult.Confidence);
+
+            // Build suggestion response if router provided suggestions
+            if (routerResult.SuggestedPackages is { Count: > 0 })
+            {
+                return BuildSuggestionResponse(routerResult.SuggestedPackages);
+            }
+
             return new AssistantResponse(
                 "Sorry, ik kon geen antwoord vinden op je vraag. " +
                 "Kun je je vraag anders formuleren of neem contact op met je leidinggevende.");
@@ -352,6 +402,23 @@ public sealed class SendMessageCommandHandler(
             .ToList();
 
         return new AssistantResponse(content, attachments.Count > 0 ? attachments : null);
+    }
+
+    /// <summary>
+    /// Builds a suggestion response listing the top-3 packages when no exact match was found.
+    /// </summary>
+    private static AssistantResponse BuildSuggestionResponse(IReadOnlyList<SuggestedPackage> suggestions)
+    {
+        string content = "Ik kon geen exact antwoord vinden op je vraag. Misschien helpt een van deze onderwerpen:\n";
+
+        foreach (SuggestedPackage suggestion in suggestions)
+        {
+            content += $"\n- 📦 **{suggestion.Title}** — {suggestion.Description}";
+        }
+
+        content += "\n\nOf stel je vraag anders, bijvoorbeeld met andere zoekwoorden.";
+
+        return new AssistantResponse(content);
     }
 
     private Task ClearPendingAsync(Guid conversationId, CancellationToken cancellationToken) =>

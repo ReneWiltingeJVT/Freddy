@@ -12,7 +12,8 @@ namespace Freddy.Infrastructure.AI;
 ///   2. If single candidate scores ≥HighConfidence → return directly
 ///   3. If single candidate scores ≥AmbiguityFloor → return with NeedsConfirmation
 ///   4. If 2+ candidates score ≥AmbiguityFloor → delegate to Ollama for disambiguation
-///   5. If no candidate scores ≥AmbiguityFloor → return no-match fallback
+///   5. If no candidate scores ≥AmbiguityFloor → LLM zero-match recovery
+///   6. If LLM zero-match also fails → return top-3 suggestions for user guidance
 ///
 /// This avoids calling Ollama for 80%+ of requests (clear matches or clear non-matches).
 /// </summary>
@@ -40,8 +41,9 @@ public sealed class CompositePackageRouter(
 
         if (scored.Count == 0)
         {
-            logger.LogInformation("[Routing] Fast-path: no candidates scored above 0 → no match");
-            return CreateNoMatchResult("Geen passend pakket gevonden.");
+            logger.LogInformation("[Routing] Fast-path: no candidates scored above 0 → trying LLM zero-match recovery");
+            return await HandleZeroMatchRecoveryAsync(userMessage, candidates, scored, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         ScoredCandidate top = scored[0];
@@ -54,7 +56,7 @@ public sealed class CompositePackageRouter(
 
         // Evaluate ambiguity zone
         return await HandleAmbiguityZoneAsync(
-            userMessage, scored, top, config, cancellationToken).ConfigureAwait(false);
+            userMessage, scored, top, candidates, config, cancellationToken).ConfigureAwait(false);
     }
 
     private PackageRouterResult HandleHighConfidence(ScoredCandidate top)
@@ -76,6 +78,7 @@ public sealed class CompositePackageRouter(
         string userMessage,
         IReadOnlyList<ScoredCandidate> scored,
         ScoredCandidate top,
+        IReadOnlyList<PackageCandidate> allCandidates,
         RoutingOptions config,
         CancellationToken cancellationToken)
     {
@@ -113,12 +116,78 @@ public sealed class CompositePackageRouter(
                 .ConfigureAwait(false);
         }
 
-        // No candidates above ambiguity floor
+        // No candidates above ambiguity floor → LLM zero-match recovery
         logger.LogInformation(
-            "[Routing] Fast-path: best score {Score:F2} below ambiguity floor {Floor:F2} → no match",
+            "[Routing] Fast-path: best score {Score:F2} below ambiguity floor {Floor:F2} → trying LLM zero-match recovery",
             top.Score, config.AmbiguityFloorThreshold);
 
-        return CreateNoMatchResult("Geen passend pakket gevonden voor deze vraag.");
+        return await HandleZeroMatchRecoveryAsync(userMessage, allCandidates, scored, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// LLM zero-match recovery: when FastPath finds no usable matches, the LLM tries to
+    /// find a semantic match by analysing all candidates. If LLM also fails, returns the
+    /// top-3 scored packages as suggestions.
+    /// </summary>
+    private async Task<PackageRouterResult> HandleZeroMatchRecoveryAsync(
+        string userMessage,
+        IReadOnlyList<PackageCandidate> allCandidates,
+        IReadOnlyList<ScoredCandidate> scored,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            PackageRouterResult llmResult = await ollamaRouter
+                .RouteAsync(userMessage, allCandidates, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (llmResult.IsSuccessful)
+            {
+                logger.LogInformation(
+                    "[Routing] LLM zero-match recovery: found match {PackageId} (confidence={Confidence:F2})",
+                    llmResult.ChosenPackageId, llmResult.Confidence);
+                return llmResult;
+            }
+
+            if (llmResult.IsServiceUnavailable)
+            {
+                return llmResult;
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "[Routing] LLM zero-match recovery failed, falling back to suggestions");
+        }
+
+        // Both FastPath and LLM failed — return suggestions from top FastPath scores
+        return CreateSuggestionResult(scored);
+    }
+
+    /// <summary>
+    /// Builds a result with the top-3 weakly scored packages as suggestions.
+    /// </summary>
+    private PackageRouterResult CreateSuggestionResult(IReadOnlyList<ScoredCandidate> scored)
+    {
+        IReadOnlyList<ScoredCandidate> top3 = scored.Take(3).ToList();
+
+        if (top3.Count == 0)
+        {
+            logger.LogInformation("[Routing] No suggestions available — no candidates scored above 0");
+            return CreateNoMatchResult("Geen passend pakket gevonden.");
+        }
+
+        string suggestions = string.Join(", ", top3.Select(s => s.Candidate.Title));
+        logger.LogInformation("[Routing] Returning {Count} suggestions: {Suggestions}", top3.Count, suggestions);
+
+        return new PackageRouterResult
+        {
+            ChosenPackageId = null,
+            Confidence = 0.0,
+            NeedsConfirmation = false,
+            Reason = "Geen directe match gevonden.",
+            SuggestedPackages = top3.Select(s => new SuggestedPackage(s.Candidate.Id, s.Candidate.Title, s.Candidate.Description)).ToList(),
+        };
     }
 
     private static PackageRouterResult CreateNoMatchResult(string reason) => new()

@@ -70,14 +70,32 @@
 - 61 tests passing (16 Application + 45 AI)
 - Branches: `plan/lightweight-llm-and-chitchat` (docs), `feature/lightweight-llm-and-chitchat` (code)
 
+### Phase 12 — MVP Retrieval Redesign (COMPLETE)
+
+- **Documentation phase**: `docs/mvp/retrieval-redesign.md` with 4-phase plan (A-D)
+- **Phase A**: Scoring improvements (stopwords, content, doc names, n-gram, description raise), LLM zero-match recovery, top-3 suggestions
+- **Phase B**: PackageCategory enum (Protocol/WorkInstruction/PersonalPlan), Admin API category support, category boost in FastPathRouter (+0.1 for PersonalPlan)
+- **Phase C**: Client entity + full CRUD, ClientDetector (deterministic alias matching), scoped retrieval in handler, AuditLog entity + repository
+- **Phase D**: DocumentChunk entity for future RAG support (forward-compat, no migration)
+- **Infrastructure**: EF migration `AddCategoriesClientsAuditLog`, DI registration, CHECK constraint
+- 116 tests passing (88 existing + 28 new)
+- Branches: `plan/mvp-retrieval-personal-plans-redesign` (docs), `feature/mvp-retrieval-redesign` (code)
+
 ## What Works
 
 - Chat: Create conversation, send messages, AI responds with package routing, documents included in responses
 - Chat: AI unavailability surfaced as user-friendly Dutch message
-- Packages: Full admin CRUD with publish lifecycle
+- Chat: Small talk detection with Dutch template responses (greeting, thanks, farewell, help intent, confusion)
+- Chat: Client detection — mentions of client names/aliases scope retrieval to include personal plans
+- Chat: Scoped retrieval — PersonalPlan packages only shown when client detected, general packages always included
+- Chat: Zero-match recovery with top-3 package suggestions
+- Chat: Category boost — PersonalPlan packages get +0.1 scoring boost
+- Packages: Full admin CRUD with publish lifecycle, categories (Protocol/WorkInstruction/PersonalPlan)
+- Clients: Full admin CRUD with display names and aliases
 - Documents: Full admin CRUD + file upload (multipart, 50MB limit) nested under packages
+- Audit logging: Infrastructure in place (entity, repository, EF config)
 - Auth: API key middleware for admin routes
-- AI: Ollama package classification, Semantic Kernel chat completion
+- AI: Ollama package classification, Semantic Kernel chat completion (Qwen 2.5 1.5B)
 - Frontend (Chat): React chat interface with real-time updates
 - Frontend (Backoffice): Package list, create/edit, detail view with document management and file upload
 - Static files: Uploaded documents served via UseStaticFiles
@@ -89,8 +107,10 @@
 
 ## What's Left to Build
 
+- Backoffice UI for client management (API is ready)
+- Backoffice UI for category selection in package forms
 - User authentication (beyond API key)
 - Production deployment configuration
-- Additional test coverage (integration tests)
+- Integration tests
 - Document search/filtering in backoffice
 - Rich text editing for package content

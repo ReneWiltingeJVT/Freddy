@@ -10,7 +10,9 @@ public interface IPackageRepository
 
     Task<IReadOnlyList<Package>> GetAllPublishedAsync(CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<Package>> GetAllAsync(bool? isPublished, string? search, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Package>> GetPublishedByClientIdAsync(Guid clientId, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<Package>> GetAllAsync(bool? isPublished, string? search, PackageCategory? category, CancellationToken cancellationToken);
 
     Task<Package> CreateAsync(Package package, CancellationToken cancellationToken);
 

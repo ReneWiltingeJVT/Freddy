@@ -3,10 +3,13 @@ import type {
   PackageSummaryDto,
   PackageDto,
   DocumentDto,
+  ClientDto,
   CreatePackageRequest,
   UpdatePackageRequest,
   CreateDocumentRequest,
   UpdateDocumentRequest,
+  CreateClientRequest,
+  UpdateClientRequest,
 } from '../types/admin';
 
 const ADMIN_API_KEY = 'freddy-admin-dev-key';
@@ -28,11 +31,13 @@ const adminApi = ky.create({
 export async function getPackages(params?: {
   search?: string;
   isPublished?: boolean;
+  category?: string;
 }): Promise<PackageSummaryDto[]> {
   const searchParams = new URLSearchParams();
   if (params?.search) searchParams.set('search', params.search);
   if (params?.isPublished !== undefined)
     searchParams.set('isPublished', String(params.isPublished));
+  if (params?.category) searchParams.set('category', params.category);
 
   return adminApi.get('packages', { searchParams }).json<PackageSummaryDto[]>();
 }
@@ -114,4 +119,38 @@ export async function uploadDocument(
   return adminApi
     .post(`packages/${packageId}/documents/upload`, { body: formData })
     .json<DocumentDto>();
+}
+
+// ── Clients ───────────────────────────────────────────────
+
+export async function getClients(params?: {
+  isActive?: boolean;
+  search?: string;
+}): Promise<ClientDto[]> {
+  const searchParams = new URLSearchParams();
+  if (params?.isActive !== undefined)
+    searchParams.set('isActive', String(params.isActive));
+  if (params?.search) searchParams.set('search', params.search);
+  return adminApi.get('clients', { searchParams }).json<ClientDto[]>();
+}
+
+export async function getClient(id: string): Promise<ClientDto> {
+  return adminApi.get(`clients/${id}`).json<ClientDto>();
+}
+
+export async function createClient(
+  data: CreateClientRequest,
+): Promise<ClientDto> {
+  return adminApi.post('clients', { json: data }).json<ClientDto>();
+}
+
+export async function updateClient(
+  id: string,
+  data: UpdateClientRequest,
+): Promise<ClientDto> {
+  return adminApi.put(`clients/${id}`, { json: data }).json<ClientDto>();
+}
+
+export async function deleteClient(id: string): Promise<void> {
+  await adminApi.delete(`clients/${id}`);
 }
