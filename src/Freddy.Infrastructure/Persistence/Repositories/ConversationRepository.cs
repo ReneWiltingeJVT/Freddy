@@ -97,4 +97,22 @@ public sealed class ConversationRepository(FreddyDbContext dbContext) : IConvers
                 cancellationToken)
             .ConfigureAwait(false);
     }
+
+    public async Task<IReadOnlyList<Message>> GetRecentMessagesAsync(
+        Guid conversationId,
+        int count,
+        CancellationToken cancellationToken)
+    {
+        // Take the last N messages by ordering descending, then reverse to chronological order
+        List<Message> messages = await dbContext.Messages
+            .AsNoTracking()
+            .Where(m => m.ConversationId == conversationId)
+            .OrderByDescending(m => m.CreatedAt)
+            .Take(count)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        messages.Reverse();
+        return messages;
+    }
 }

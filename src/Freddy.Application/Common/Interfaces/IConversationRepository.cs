@@ -31,4 +31,13 @@ public interface IConversationRepository
         Guid conversationId,
         Guid? clientId,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Returns the most recent <paramref name="count"/> messages for a conversation,
+    /// ordered chronologically (oldest first). Used to build LLM conversation history.
+    /// </summary>
+    Task<IReadOnlyList<Message>> GetRecentMessagesAsync(
+        Guid conversationId,
+        int count,
+        CancellationToken cancellationToken);
 }

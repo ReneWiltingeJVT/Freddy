@@ -15,10 +15,12 @@ public sealed class SendMessageCommandHandler(
     IPackageRouter packageRouter,
     ISmallTalkDetector smallTalkDetector,
     IClientDetector clientDetector,
-    IOverviewQueryDetector overviewQueryDetector,
+    IKnowledgeContextBuilder knowledgeContextBuilder,
+    IChatResponseGenerator chatResponseGenerator,
     ILogger<SendMessageCommandHandler> logger) : IRequestHandler<SendMessageCommand, Result<MessageDto>>
 {
     private const double HighConfidenceThreshold = 0.8;
+    private const int MaxHistoryMessages = 10;
 
     // Dutch/English words that count as "yes, that's correct"
     private static readonly HashSet<string> AffirmativeWords =
@@ -48,7 +50,7 @@ public sealed class SendMessageCommandHandler(
         CancellationToken cancellationToken)
     {
         logger.LogInformation(
-            "[DEBUG] SendMessageHandler — Start. ConversationId: {ConversationId}, Content: {Content}",
+            "[Chat] Start. ConversationId: {ConversationId}, Content: {Content}",
             request.ConversationId, request.Content);
 
         Conversation? conversation = await conversationRepository
@@ -57,7 +59,7 @@ public sealed class SendMessageCommandHandler(
         if (conversation is null)
         {
             logger.LogWarning(
-                "[DEBUG] SendMessageHandler — Conversation {ConversationId} NOT FOUND",
+                "[Chat] Conversation {ConversationId} NOT FOUND",
                 request.ConversationId);
             return Result<MessageDto>.NotFound($"Conversation {request.ConversationId} not found.");
         }
@@ -73,9 +75,9 @@ public sealed class SendMessageCommandHandler(
             CreatedAt = DateTimeOffset.UtcNow,
         };
         _ = await conversationRepository.AddMessageAsync(userMessage, cancellationToken).ConfigureAwait(false);
-        logger.LogInformation("[DEBUG] SendMessageHandler — User message saved: {MessageId}", userMessage.Id);
+        logger.LogInformation("[Chat] User message saved: {MessageId}", userMessage.Id);
 
-        // 2. Small talk fast-path: skip routing entirely
+        // 2. Small talk fast-path: skip routing entirely (<1ms)
         SmallTalkResult smallTalkResult = smallTalkDetector.Detect(trimmedContent);
         if (smallTalkResult.IsSmallTalk)
         {
@@ -101,34 +103,7 @@ public sealed class SendMessageCommandHandler(
                 smallTalkMessage.CreatedAt));
         }
 
-        // 4. Overview query fast-path: answer count/list questions without full routing
-        AssistantResponse? overviewResponse = await TryHandleOverviewQueryAsync(
-            conversation, trimmedContent, cancellationToken).ConfigureAwait(false);
-
-        if (overviewResponse is not null)
-        {
-            logger.LogInformation(
-                "[OverviewQuery] Answered overview query for conversation {ConversationId}",
-                request.ConversationId);
-
-            var overviewMessage = new Message
-            {
-                Id = Guid.CreateVersion7(),
-                ConversationId = request.ConversationId,
-                Role = MessageRole.Assistant,
-                Content = overviewResponse.Content,
-                CreatedAt = DateTimeOffset.UtcNow,
-            };
-            _ = await conversationRepository.AddMessageAsync(overviewMessage, cancellationToken).ConfigureAwait(false);
-
-            return Result<MessageDto>.Success(new MessageDto(
-                overviewMessage.Id,
-                MapRole(overviewMessage.Role),
-                overviewMessage.Content,
-                overviewMessage.CreatedAt));
-        }
-
-        // 4. Dispatch based on pending state
+        // 3. Dispatch based on pending state or route + generate conversational response
         AssistantResponse response = conversation.PendingState switch
         {
             ConversationPendingState.AwaitingPackageConfirmation =>
@@ -143,7 +118,7 @@ public sealed class SendMessageCommandHandler(
                     .ConfigureAwait(false),
         };
 
-        // 3. Save assistant message
+        // 4. Save assistant message
         var assistantMessage = new Message
         {
             Id = Guid.CreateVersion7(),
@@ -156,7 +131,7 @@ public sealed class SendMessageCommandHandler(
         _ = await conversationRepository.AddMessageAsync(assistantMessage, cancellationToken).ConfigureAwait(false);
 
         logger.LogInformation(
-            "[DEBUG] SendMessageHandler — COMPLETE. ConversationId={ConversationId}, ResponseLength={ResponseLength}",
+            "[Chat] COMPLETE. ConversationId={ConversationId}, ResponseLength={ResponseLength}",
             request.ConversationId, response.Content.Length);
 
         return Result<MessageDto>.Success(new MessageDto(
@@ -198,14 +173,13 @@ public sealed class SendMessageCommandHandler(
                 return new AssistantResponse("Sorry, er is een fout opgetreden bij het ophalen van de informatie. Probeer het opnieuw.");
             }
 
-            return await DeliverPackageAndMaybeOfferDocumentsAsync(
-                conversation, package, cancellationToken).ConfigureAwait(false);
+            return await DeliverPackageWithLlmAsync(conversation, package, userInput, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         if (isNo)
         {
             await ClearPendingAsync(conversation.Id, cancellationToken).ConfigureAwait(false);
-            logger.LogInformation("[Confirmation] User denied package match ÔåÆ asking to rephrase");
             return new AssistantResponse("Geen probleem! Kun je je vraag iets anders omschrijven, dan help ik je verder.");
         }
 
@@ -254,7 +228,7 @@ public sealed class SendMessageCommandHandler(
     }
 
     // -----------------------------------------------------------------------
-    // Routing
+    // Routing + Conversational Response
     // -----------------------------------------------------------------------
 
     private async Task<AssistantResponse> RouteAndBuildResponseAsync(
@@ -285,8 +259,6 @@ public sealed class SendMessageCommandHandler(
         IReadOnlyList<Package> packages;
         if (effectiveClientId.HasValue)
         {
-            // Client context: include personal plan packages scoped to this client
-            // alongside all general published packages (Protocol + WorkInstruction)
             IReadOnlyList<Package> generalPackages = await packageRepository
                 .GetAllPublishedAsync(cancellationToken).ConfigureAwait(false);
             IReadOnlyList<Package> clientPackages = await packageRepository
@@ -308,7 +280,7 @@ public sealed class SendMessageCommandHandler(
             packages = [.. allPublished.Where(p => p.Category != PackageCategory.PersonalPlan)];
         }
 
-        logger.LogInformation("[DEBUG] SendMessageHandler — Found {PackageCount} candidate packages", packages.Count);
+        logger.LogInformation("[Routing] Found {PackageCount} candidate packages", packages.Count);
 
         // Batch-load document names for all candidate packages in a single query (avoids N+1)
         Dictionary<Guid, List<string>> documentNamesByPackage = await documentRepository
@@ -323,264 +295,124 @@ public sealed class SendMessageCommandHandler(
                 documentNamesByPackage.TryGetValue(p.Id, out List<string>? names) ? names : [],
                 p.Category)),];
 
-        logger.LogInformation("[DEBUG] SendMessageHandler — Calling PackageRouter...");
+        logger.LogInformation("[Routing] Calling PackageRouter...");
         PackageRouterResult routerResult = await packageRouter
             .RouteAsync(userInput, candidates, cancellationToken).ConfigureAwait(false);
 
         logger.LogInformation(
-            "[DEBUG] Router — PackageId={PackageId}, Confidence={Confidence:F2}, NeedsConfirmation={NeedsConfirmation}, ServiceUnavailable={ServiceUnavailable}",
-            routerResult.ChosenPackageId, routerResult.Confidence,
-            routerResult.NeedsConfirmation, routerResult.IsServiceUnavailable);
+            "[Routing] Result — PackageId={PackageId}, Confidence={Confidence:F2}, NeedsConfirmation={NeedsConfirmation}",
+            routerResult.ChosenPackageId, routerResult.Confidence, routerResult.NeedsConfirmation);
 
-        // IsServiceUnavailable should no longer propagate (CompositePackageRouter handles it)
-        // but guard defensively in case of future routing implementations
-        if (routerResult.IsServiceUnavailable)
+        // Resolve matched package (if any)
+        Package? matchedPackage = null;
+        if (routerResult.IsSuccessful && routerResult.ChosenPackageId is not null)
         {
-            logger.LogWarning("[Routing] Received IsServiceUnavailable at handler level — returning suggestion fallback");
-            return routerResult.SuggestedPackages is { Count: > 0 }
-                ? BuildSuggestionResponse(routerResult.SuggestedPackages)
-                : new AssistantResponse(
-                "Ik kon geen passend antwoord vinden. Kun je je vraag anders formuleren of neem contact op met je leidinggevende.");
+            matchedPackage = await packageRepository
+                .GetByIdAsync(routerResult.ChosenPackageId.Value, cancellationToken).ConfigureAwait(false);
         }
 
-        if (!routerResult.IsSuccessful || routerResult.ChosenPackageId is null)
+        // Check if matched package requires confirmation
+        if (matchedPackage is not null)
         {
-            logger.LogInformation("No match (confidence: {Confidence:F2})", routerResult.Confidence);
+            bool shouldAskConfirmation = matchedPackage.RequiresConfirmation &&
+                                         (routerResult.NeedsConfirmation || routerResult.Confidence < HighConfidenceThreshold);
 
-            // Build suggestion response if router provided suggestions
-            return routerResult.SuggestedPackages is { Count: > 0 }
-                ? BuildSuggestionResponse(routerResult.SuggestedPackages)
-                : new AssistantResponse(
-                "Sorry, ik kon geen antwoord vinden op je vraag. " +
-                "Kun je je vraag anders formuleren of neem contact op met je leidinggevende.");
+            if (shouldAskConfirmation)
+            {
+                logger.LogInformation(
+                    "[Routing] Match needs confirmation: {PackageName} (confidence: {Confidence:F2})",
+                    matchedPackage.Title, routerResult.Confidence);
+
+                await conversationRepository.SetPendingStateAsync(
+                    conversation.Id, matchedPackage.Id,
+                    ConversationPendingState.AwaitingPackageConfirmation,
+                    cancellationToken).ConfigureAwait(false);
+
+                return new AssistantResponse(
+                    $"Ik denk dat je vraag gaat over **{matchedPackage.Title}**. Klopt dat?\n\n_{matchedPackage.Description}_");
+            }
         }
 
-        Package? package = await packageRepository
-            .GetByIdAsync(routerResult.ChosenPackageId.Value, cancellationToken).ConfigureAwait(false);
+        // Build knowledge context and generate conversational response via LLM
+        KnowledgeContext knowledgeContext = await knowledgeContextBuilder
+            .BuildAsync(effectiveClientId, cancellationToken).ConfigureAwait(false);
 
-        if (package is null)
-        {
-            logger.LogWarning("Router returned packageId {PackageId} not found in database", routerResult.ChosenPackageId.Value);
-            return new AssistantResponse("Sorry, er is een fout opgetreden bij het ophalen van de informatie. Probeer het opnieuw.");
-        }
+        IReadOnlyList<Message> history = await conversationRepository
+            .GetRecentMessagesAsync(conversation.Id, MaxHistoryMessages, cancellationToken)
+            .ConfigureAwait(false);
 
-        // Check if package requires confirmation AND router suggests it
-        bool shouldAskConfirmation = package.RequiresConfirmation &&
-                                     (routerResult.NeedsConfirmation || routerResult.Confidence < HighConfidenceThreshold);
+        var chatRequest = new ChatResponseRequest(
+            userInput,
+            knowledgeContext,
+            matchedPackage?.Title,
+            matchedPackage?.Content,
+            history);
 
-        if (shouldAskConfirmation)
-        {
-            logger.LogInformation(
-                "Match needs confirmation: {PackageName} (confidence: {Confidence:F2}, RequiresConfirmation: {RequiresConfirmation})",
-                package.Title, routerResult.Confidence, package.RequiresConfirmation);
+        ChatResponseResult chatResult = await chatResponseGenerator
+            .GenerateAsync(chatRequest, cancellationToken).ConfigureAwait(false);
 
-            await conversationRepository.SetPendingStateAsync(
-                conversation.Id, package.Id,
-                ConversationPendingState.AwaitingPackageConfirmation,
-                cancellationToken).ConfigureAwait(false);
-
-            return new AssistantResponse($"Ik denk dat je vraag gaat over **{package.Title}**. Klopt dat?\n\n_{package.Description}_");
-        }
-
-        // High confidence or confirmation not required — deliver directly
         logger.LogInformation(
-            "Delivering package directly: {PackageName} (confidence: {Confidence:F2}, RequiresConfirmation: {RequiresConfirmation})",
-            package.Title, routerResult.Confidence, package.RequiresConfirmation);
-        return await DeliverPackageAndMaybeOfferDocumentsAsync(conversation, package, cancellationToken).ConfigureAwait(false);
+            "[Chat] LLM response generated. Grounded={IsGrounded}, Source={Source}, Length={Length}",
+            chatResult.IsGrounded, chatResult.SourcePackageTitle, chatResult.Content.Length);
+
+        // If we matched a package, offer documents after the conversational answer
+        if (matchedPackage is not null)
+        {
+            return await AppendDocumentOfferAsync(conversation, matchedPackage, chatResult.Content, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return new AssistantResponse(chatResult.Content);
     }
 
     // -----------------------------------------------------------------------
-    // Overview query handler
+    // Package delivery with LLM
     // -----------------------------------------------------------------------
 
     /// <summary>
-    /// Handles count/list/personal-plan overview queries without going through full routing.
-    /// Returns null if the message is not an overview query (caller should fall through to routing).
+    /// Delivers package content through the LLM for a conversational answer,
+    /// then optionally offers documents.
+    /// Used when user confirms a pending package.
     /// </summary>
-    private async Task<AssistantResponse?> TryHandleOverviewQueryAsync(
+    private async Task<AssistantResponse> DeliverPackageWithLlmAsync(
         Conversation conversation,
+        Package package,
         string userInput,
         CancellationToken cancellationToken)
     {
-        OverviewQueryIntent intent = overviewQueryDetector.Detect(userInput);
-        if (!intent.IsOverview)
-        {
-            return null;
-        }
+        await ClearPendingAsync(conversation.Id, cancellationToken).ConfigureAwait(false);
 
-        logger.LogInformation(
-            "[OverviewQuery] Detected {QueryType} (category={Category}, clientHint='{Hint}')",
-            intent.QueryType, intent.Category, intent.ClientNameHint);
+        Guid? effectiveClientId = conversation.PendingClientId;
+        KnowledgeContext knowledgeContext = await knowledgeContextBuilder
+            .BuildAsync(effectiveClientId, cancellationToken).ConfigureAwait(false);
 
-        switch (intent.QueryType)
-        {
-            case OverviewQueryType.CountByCategory:
-                {
-                    if (intent.Category is null)
-                    {
-                        break;
-                    }
+        IReadOnlyList<Message> history = await conversationRepository
+            .GetRecentMessagesAsync(conversation.Id, MaxHistoryMessages, cancellationToken)
+            .ConfigureAwait(false);
 
-                    IReadOnlyList<Package> packages = await packageRepository
-                        .GetAllPublishedByCategoryAsync(intent.Category.Value, cancellationToken)
-                        .ConfigureAwait(false);
+        var chatRequest = new ChatResponseRequest(
+            userInput,
+            knowledgeContext,
+            package.Title,
+            package.Content,
+            history);
 
-                    string categoryName = CategoryDisplayName(intent.Category.Value);
-                    if (packages.Count == 0)
-                    {
-                        return new AssistantResponse($"Er zijn momenteel geen gepubliceerde {categoryName.ToLower()}s.");
-                    }
+        ChatResponseResult chatResult = await chatResponseGenerator
+            .GenerateAsync(chatRequest, cancellationToken).ConfigureAwait(false);
 
-                    string titles = string.Join(", ", packages.Select(p => $"**{p.Title}**"));
-                    string noun = packages.Count == 1 ? categoryName.ToLower() : $"{categoryName.ToLower()}s";
-                    string followUp = packages.Count == 1
-                        ? $"\n\nWil je meer informatie over {packages[0].Title}?"
-                        : $"\n\nWelk{(intent.Category == PackageCategory.Protocol ? "" : "e")} {categoryName.ToLower()} wil je meer over weten?";
-                    return new AssistantResponse(
-                        $"Er {(packages.Count == 1 ? "is" : "zijn")} momenteel **{packages.Count}** {noun}: {titles}.{followUp}");
-                }
-
-            case OverviewQueryType.ListByCategory:
-                {
-                    if (intent.Category is null)
-                    {
-                        break;
-                    }
-
-                    IReadOnlyList<Package> packages = await packageRepository
-                        .GetAllPublishedByCategoryAsync(intent.Category.Value, cancellationToken)
-                        .ConfigureAwait(false);
-
-                    string categoryName = CategoryDisplayName(intent.Category.Value);
-                    if (packages.Count == 0)
-                    {
-                        return new AssistantResponse($"Er zijn momenteel geen gepubliceerde {categoryName.ToLower()}s.");
-                    }
-
-                    string list = string.Join("\n", packages.Select(p => $"- **{p.Title}** \u2014 {p.Description}"));
-                    string countLine = packages.Count == 1 ? string.Empty : $"Er zijn **{packages.Count}** {categoryName.ToLower()}s beschikbaar.\n\n";
-                    string followUpList = packages.Count == 1
-                        ? $"\n\nWil je meer informatie over {packages[0].Title}?"
-                        : $"\n\nWelk{(intent.Category == PackageCategory.Protocol ? "" : "e")} {categoryName.ToLower()} wil je meer over weten?";
-                    return new AssistantResponse($"{countLine}Dit zijn de beschikbare {categoryName.ToLower()}s:\n\n{list}{followUpList}");
-                }
-
-            case OverviewQueryType.ListAll:
-                {
-                    IReadOnlyList<Package> allPublished = await packageRepository
-                        .GetAllPublishedAsync(cancellationToken)
-                        .ConfigureAwait(false);
-
-                    List<Package> generalPackages = [.. allPublished.Where(p => p.Category != PackageCategory.PersonalPlan)];
-
-                    if (generalPackages.Count == 0)
-                    {
-                        return new AssistantResponse("Er zijn momenteel geen gepubliceerde pakketten.");
-                    }
-
-                    IOrderedEnumerable<IGrouping<PackageCategory, Package>> grouped = generalPackages
-                        .GroupBy(p => p.Category)
-                        .OrderBy(g => (int)g.Key);
-
-                    var sb = new System.Text.StringBuilder("Dit zijn alle beschikbare pakketten:\n");
-                    foreach (IGrouping<PackageCategory, Package>? group in grouped)
-                    {
-                        _ = sb.Append($"\n**{CategoryDisplayName(group.Key)}s:**\n");
-                        foreach (Package p in group)
-                        {
-                            _ = sb.Append($"- {p.Title}\n");
-                        }
-                    }
-
-                    return new AssistantResponse(sb.ToString().TrimEnd() + "\n\nOver welk pakket wil je meer weten?");
-                }
-
-            case OverviewQueryType.PersonalPlansForClient:
-                {
-                    Guid? clientId = null;
-                    string? clientName = null;
-
-                    // Try to find the client from the extracted name hint
-                    if (intent.ClientNameHint is not null)
-                    {
-                        ClientDetectionResult hintResult = await clientDetector
-                            .DetectAsync(intent.ClientNameHint, cancellationToken).ConfigureAwait(false);
-
-                        if (hintResult.IsDetected)
-                        {
-                            clientId = hintResult.ClientId;
-                            clientName = hintResult.MatchedName;
-
-                            // Persist for future turns
-                            if (conversation.PendingClientId != clientId)
-                            {
-                                await conversationRepository
-                                    .SetPendingClientIdAsync(conversation.Id, clientId, cancellationToken)
-                                    .ConfigureAwait(false);
-                            }
-                        }
-                    }
-
-                    // Fall back to conversation's persisted client
-                    if (clientId is null && conversation.PendingClientId.HasValue)
-                    {
-                        clientId = conversation.PendingClientId;
-                    }
-
-                    if (clientId is null)
-                    {
-                        return new AssistantResponse(
-                            "Ik herkende geen bekende cliënt in je vraag. Kun je de naam van de cliënt vermelden?");
-                    }
-
-                    IReadOnlyList<Package> plans = await packageRepository
-                        .GetPublishedByClientIdAsync(clientId.Value, cancellationToken)
-                        .ConfigureAwait(false);
-
-                    if (plans.Count == 0)
-                    {
-                        return new AssistantResponse(
-                            $"Er zijn geen persoonlijke plannen beschikbaar voor {clientName ?? "deze cliënt"}.");
-                    }
-
-                    string planList = string.Join("\n", plans.Select(p => $"- **{p.Title}** \u2014 {p.Description}"));
-                    return new AssistantResponse(
-                        $"Dit zijn de persoonlijke plannen voor **{clientName ?? "de cliënt"}**:\n\n{planList}");
-                }
-
-            case OverviewQueryType.None:
-                break;
-            default:
-                break;
-        }
-
-        return null;
+        return await AppendDocumentOfferAsync(conversation, package, chatResult.Content, cancellationToken)
+            .ConfigureAwait(false);
     }
 
-    private static string CategoryDisplayName(PackageCategory category) => category switch
-    {
-        PackageCategory.Protocol => "Protocol",
-        PackageCategory.WorkInstruction => "Werkinstructie",
-        PackageCategory.PersonalPlan => "Persoonlijk plan",
-        _ => "Pakket",
-    };
-
-
-    // -----------------------------------------------------------------------
-    // Content builders
-    // -----------------------------------------------------------------------
-
     /// <summary>
-    /// Delivers package content. If documents exist, appends an offer to receive them
-    /// and sets the conversation to AwaitingDocumentDelivery.
+    /// Appends a document offer to the response if the package has documents.
     /// </summary>
-    private async Task<AssistantResponse> DeliverPackageAndMaybeOfferDocumentsAsync(
+    private async Task<AssistantResponse> AppendDocumentOfferAsync(
         Conversation conversation,
         Package package,
+        string responseContent,
         CancellationToken cancellationToken)
     {
-        string content = $"**{package.Title}**\n\n{package.Content}";
-
         IReadOnlyList<Document> documents = await documentRepository
             .GetByPackageIdAsync(package.Id, cancellationToken).ConfigureAwait(false);
 
@@ -595,15 +427,19 @@ public sealed class SendMessageCommandHandler(
                 ? $"**{documents[0].Name}**"
                 : string.Join(", ", documents.Select(d => $"**{d.Name}**"));
 
-            content += $"\n\n---\n\nEr {(documents.Count == 1 ? "is" : "zijn")} ook {(documents.Count == 1 ? "een document" : $"{documents.Count} documenten")} beschikbaar ({docNames}). Wil je {(documents.Count == 1 ? "dit" : "deze")} ontvangen?";
+            responseContent += $"\n\n---\n\nEr {(documents.Count == 1 ? "is" : "zijn")} ook {(documents.Count == 1 ? "een document" : $"{documents.Count} documenten")} beschikbaar ({docNames}). Wil je {(documents.Count == 1 ? "dit" : "deze")} ontvangen?";
         }
         else
         {
             await ClearPendingAsync(conversation.Id, cancellationToken).ConfigureAwait(false);
         }
 
-        return new AssistantResponse(content);
+        return new AssistantResponse(responseContent);
     }
+
+    // -----------------------------------------------------------------------
+    // Content builders
+    // -----------------------------------------------------------------------
 
     /// <summary>Builds a structured document response with download attachments.</summary>
     private static AssistantResponse BuildDocumentResponse(IReadOnlyList<Document> documents)
@@ -618,23 +454,6 @@ public sealed class SendMessageCommandHandler(
             .ToList();
 
         return new AssistantResponse(content, attachments.Count > 0 ? attachments : null);
-    }
-
-    /// <summary>
-    /// Builds a suggestion response listing the top-3 packages when no exact match was found.
-    /// </summary>
-    private static AssistantResponse BuildSuggestionResponse(IReadOnlyList<SuggestedPackage> suggestions)
-    {
-        string content = "Ik kon geen exact antwoord vinden op je vraag. Misschien helpt een van deze onderwerpen:\n";
-
-        foreach (SuggestedPackage suggestion in suggestions)
-        {
-            content += $"\n- 📦 **{suggestion.Title}** — {suggestion.Description}";
-        }
-
-        content += "\n\nOf stel je vraag anders, bijvoorbeeld met andere zoekwoorden.";
-
-        return new AssistantResponse(content);
     }
 
     private Task ClearPendingAsync(Guid conversationId, CancellationToken cancellationToken) =>

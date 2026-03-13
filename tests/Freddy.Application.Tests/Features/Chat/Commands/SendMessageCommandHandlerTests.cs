@@ -18,7 +18,8 @@ public sealed class SendMessageCommandHandlerTests
     private readonly IPackageRouter _packageRouter = Substitute.For<IPackageRouter>();
     private readonly ISmallTalkDetector _smallTalkDetector = Substitute.For<ISmallTalkDetector>();
     private readonly IClientDetector _clientDetector = Substitute.For<IClientDetector>();
-    private readonly IOverviewQueryDetector _overviewQueryDetector = Substitute.For<IOverviewQueryDetector>();
+    private readonly IKnowledgeContextBuilder _knowledgeContextBuilder = Substitute.For<IKnowledgeContextBuilder>();
+    private readonly IChatResponseGenerator _chatResponseGenerator = Substitute.For<IChatResponseGenerator>();
     private readonly SendMessageCommandHandler _handler;
 
     public SendMessageCommandHandlerTests()
@@ -26,13 +27,33 @@ public sealed class SendMessageCommandHandlerTests
         _smallTalkDetector.Detect(Arg.Any<string>()).Returns(SmallTalkResult.NoMatch);
         _clientDetector.DetectAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(ClientDetectionResult.NoMatch);
-        _overviewQueryDetector.Detect(Arg.Any<string>())
-            .Returns(OverviewQueryIntent.None);
 
         // Default: batch document name loading returns empty dictionary
         _documentRepository
             .GetNamesByPackageIdsAsync(Arg.Any<IEnumerable<Guid>>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<Guid, List<string>>());
+
+        // Default: knowledge context returns minimal context
+        _knowledgeContextBuilder
+            .BuildAsync(Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(new KnowledgeContext("Geen pakketten", "Geen cliënten", string.Empty));
+
+        // Default: chat history returns empty
+        _conversationRepository
+            .GetRecentMessagesAsync(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([]);
+
+        // Default: LLM generates a response based on matched package
+        _chatResponseGenerator
+            .GenerateAsync(Arg.Any<ChatResponseRequest>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                ChatResponseRequest req = callInfo.Arg<ChatResponseRequest>();
+                string content = req.MatchedPackageTitle is not null
+                    ? $"Volgens **{req.MatchedPackageTitle}**: {req.MatchedPackageContent}"
+                    : "Sorry, ik kon geen passend antwoord vinden op je vraag.";
+                return new ChatResponseResult(content, req.MatchedPackageTitle, req.MatchedPackageTitle is not null);
+            });
 
         _handler = new SendMessageCommandHandler(
             _conversationRepository,
@@ -41,7 +62,8 @@ public sealed class SendMessageCommandHandlerTests
             _packageRouter,
             _smallTalkDetector,
             _clientDetector,
-            _overviewQueryDetector,
+            _knowledgeContextBuilder,
+            _chatResponseGenerator,
             NullLogger<SendMessageCommandHandler>.Instance);
     }
 
@@ -96,11 +118,11 @@ public sealed class SendMessageCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value!.Role.Should().Be("assistant");
         result.Value.Content.Should().Contain("Voedselbank");
-        result.Value.Content.Should().Contain("Stap 1: Check voorraad.");
+        result.Value.Content.Should().Contain("Check voorraad");
     }
 
     [Fact]
-    public async Task Handle_HighConfidenceMatch_IncludesDocumentLinks()
+    public async Task Handle_HighConfidenceMatch_IncludesDocumentOffer()
     {
         // Arrange
         var conversationId = Guid.CreateVersion7();
@@ -164,7 +186,7 @@ public sealed class SendMessageCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ServiceUnavailable_ReturnsFallbackMessage()
+    public async Task Handle_ServiceUnavailable_LlmFallback()
     {
         // Arrange
         // When the router returns IsServiceUnavailable (defensive path — CompositePackageRouter
@@ -196,6 +218,11 @@ public sealed class SendMessageCommandHandlerTests
                 Reason = "AI-service is niet bereikbaar.",
             });
 
+        // LLM should still generate a response from knowledge context (no matched package)
+        _chatResponseGenerator
+            .GenerateAsync(Arg.Any<ChatResponseRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ChatResponseResult("Ik kon helaas geen specifiek antwoord vinden.", null, false));
+
         SendMessageCommand command = new(conversationId, "Hoe werkt de voedselbank?");
 
         // Act
@@ -224,7 +251,7 @@ public sealed class SendMessageCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_NoPackageMatch_ReturnsFallbackMessage()
+    public async Task Handle_NoPackageMatch_LlmGeneratesResponse()
     {
         // Arrange
         var conversationId = Guid.CreateVersion7();
@@ -260,6 +287,8 @@ public sealed class SendMessageCommandHandlerTests
         // Assert
         result.IsSuccess.Should().BeTrue();
         result.Value!.Content.Should().Contain("Sorry");
+        await _chatResponseGenerator.Received(1)
+            .GenerateAsync(Arg.Any<ChatResponseRequest>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -315,9 +344,10 @@ public sealed class SendMessageCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_RouterReturnsInvalidPackageId_ReturnsFallback()
+    public async Task Handle_RouterReturnsInvalidPackageId_FallsBackToLlm()
     {
-        // Arrange
+        // Arrange — router returns a PackageId that does not exist in the database.
+        // The handler should gracefully fall back to the LLM with no matched package context.
         var conversationId = Guid.CreateVersion7();
         var fakePackageId = Guid.CreateVersion7();
         var conversation = new Conversation
@@ -351,9 +381,13 @@ public sealed class SendMessageCommandHandlerTests
         // Act
         Result<MessageDto> result = await _handler.Handle(command, CancellationToken.None);
 
-        // Assert
+        // Assert — LLM generates a response without matched package, includes "Sorry"
         result.IsSuccess.Should().BeTrue();
-        result.Value!.Content.Should().Contain("fout");
+        result.Value!.Content.Should().NotBeNullOrEmpty();
+        await _chatResponseGenerator.Received(1)
+            .GenerateAsync(
+                Arg.Is<ChatResponseRequest>(r => r.MatchedPackageTitle == null),
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]
