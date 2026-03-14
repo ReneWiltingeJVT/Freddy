@@ -15,6 +15,7 @@ public sealed class SendMessageCommandHandler(
     IPackageRouter packageRouter,
     ISmallTalkDetector smallTalkDetector,
     IClientDetector clientDetector,
+    IPackageResponseFormatter packageResponseFormatter,
     IKnowledgeContextBuilder knowledgeContextBuilder,
     IChatResponseGenerator chatResponseGenerator,
     ILogger<SendMessageCommandHandler> logger) : IRequestHandler<SendMessageCommand, Result<MessageDto>>
@@ -173,7 +174,7 @@ public sealed class SendMessageCommandHandler(
                 return new AssistantResponse("Sorry, er is een fout opgetreden bij het ophalen van de informatie. Probeer het opnieuw.");
             }
 
-            return await DeliverPackageWithLlmAsync(conversation, package, userInput, cancellationToken)
+            return await DeliverPackageAsync(conversation, package, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -333,7 +334,20 @@ public sealed class SendMessageCommandHandler(
             }
         }
 
-        // Build knowledge context and generate conversational response via LLM
+        // Matched package: deterministic formatter — no LLM call, <5ms
+        if (matchedPackage is not null)
+        {
+            logger.LogInformation(
+                "[Routing] Using PackageResponseFormatter for matched package: {PackageName}", matchedPackage.Title);
+
+            string formattedResponse = packageResponseFormatter.Format(matchedPackage);
+            return await AppendDocumentOfferAsync(conversation, matchedPackage, formattedResponse, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        // No match: use LLM for overview / ambiguous queries (qwen2.5:1.5b, slim prompt, 8s timeout)
+        logger.LogInformation("[Routing] No package match — delegating to LLM for overview/ambiguous response");
+
         KnowledgeContext knowledgeContext = await knowledgeContextBuilder
             .BuildAsync(effectiveClientId, cancellationToken).ConfigureAwait(false);
 
@@ -344,63 +358,37 @@ public sealed class SendMessageCommandHandler(
         var chatRequest = new ChatResponseRequest(
             userInput,
             knowledgeContext,
-            matchedPackage?.Title,
-            matchedPackage?.Content,
+            MatchedPackageTitle: null,
+            MatchedPackageContent: null,
             history);
 
         ChatResponseResult chatResult = await chatResponseGenerator
             .GenerateAsync(chatRequest, cancellationToken).ConfigureAwait(false);
 
         logger.LogInformation(
-            "[Chat] LLM response generated. Grounded={IsGrounded}, Source={Source}, Length={Length}",
-            chatResult.IsGrounded, chatResult.SourcePackageTitle, chatResult.Content.Length);
-
-        // If we matched a package, offer documents after the conversational answer
-        if (matchedPackage is not null)
-        {
-            return await AppendDocumentOfferAsync(conversation, matchedPackage, chatResult.Content, cancellationToken)
-                .ConfigureAwait(false);
-        }
+            "[Chat] LLM overview response generated. Grounded={IsGrounded}, Length={Length}",
+            chatResult.IsGrounded, chatResult.Content.Length);
 
         return new AssistantResponse(chatResult.Content);
     }
 
     // -----------------------------------------------------------------------
-    // Package delivery with LLM
+    // Package delivery via formatter
     // -----------------------------------------------------------------------
 
     /// <summary>
-    /// Delivers package content through the LLM for a conversational answer,
-    /// then optionally offers documents.
-    /// Used when user confirms a pending package.
+    /// Delivers package content using the deterministic formatter (no LLM call),
+    /// then optionally offers documents. Used when user confirms a pending package.
     /// </summary>
-    private async Task<AssistantResponse> DeliverPackageWithLlmAsync(
+    private async Task<AssistantResponse> DeliverPackageAsync(
         Conversation conversation,
         Package package,
-        string userInput,
         CancellationToken cancellationToken)
     {
         await ClearPendingAsync(conversation.Id, cancellationToken).ConfigureAwait(false);
 
-        Guid? effectiveClientId = conversation.PendingClientId;
-        KnowledgeContext knowledgeContext = await knowledgeContextBuilder
-            .BuildAsync(effectiveClientId, cancellationToken).ConfigureAwait(false);
-
-        IReadOnlyList<Message> history = await conversationRepository
-            .GetRecentMessagesAsync(conversation.Id, MaxHistoryMessages, cancellationToken)
-            .ConfigureAwait(false);
-
-        var chatRequest = new ChatResponseRequest(
-            userInput,
-            knowledgeContext,
-            package.Title,
-            package.Content,
-            history);
-
-        ChatResponseResult chatResult = await chatResponseGenerator
-            .GenerateAsync(chatRequest, cancellationToken).ConfigureAwait(false);
-
-        return await AppendDocumentOfferAsync(conversation, package, chatResult.Content, cancellationToken)
+        string formattedResponse = packageResponseFormatter.Format(package);
+        return await AppendDocumentOfferAsync(conversation, package, formattedResponse, cancellationToken)
             .ConfigureAwait(false);
     }
 

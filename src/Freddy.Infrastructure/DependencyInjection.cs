@@ -97,6 +97,7 @@ public static class DependencyInjection
 
 #pragma warning restore SKEXP0070
 
+        services.AddSingleton<IPackageResponseFormatter, PackageResponseFormatter>();
         services.AddScoped<IChatService, OllamaChatService>();
         services.AddSingleton<ISmallTalkDetector, SmallTalkDetector>();
         services.AddSingleton<IOverviewQueryDetector, OverviewQueryDetector>();

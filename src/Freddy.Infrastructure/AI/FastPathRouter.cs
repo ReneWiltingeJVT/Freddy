@@ -90,10 +90,9 @@ public sealed class FastPathRouter(ILogger<FastPathRouter> logger) : IFastPathRo
         highestScore = ScoreContentKeywords(filteredMessageWords, candidate.Content, highestScore);
         highestScore = ScoreNgram(filteredMessageWords, candidate, highestScore);
 
-        if (highestScore < 0.3)
-        {
-            highestScore = ScoreDescription(filteredMessageWords, candidate.Description, highestScore);
-        }
+        // Always score description — resolves cases where title/tag/synonym don't contain the query word
+        // but description clearly describes the package (e.g. "voedselbank" in description).
+        highestScore = ScoreDescription(filteredMessageWords, candidate.Description, highestScore);
 
         // Category boost: PersonalPlan packages get a small bonus to surface personal plans
         // when there's any match, making them easier to find during scoped retrieval.
@@ -282,6 +281,11 @@ public sealed class FastPathRouter(ILogger<FastPathRouter> logger) : IFastPathRo
 
     private static double ScoreDescription(string[] filteredMessageWords, string description, double currentHighest)
     {
+        if (string.IsNullOrWhiteSpace(description))
+        {
+            return currentHighest;
+        }
+
         string[] descriptionWords = FilterStopwords(
             Normalize(description).Split(WordSeparators, StringSplitOptions.RemoveEmptyEntries));
 
@@ -289,9 +293,14 @@ public sealed class FastPathRouter(ILogger<FastPathRouter> logger) : IFastPathRo
             mw.Length >= MinPartialMatchLength
             && descriptionWords.Any(dw => string.Equals(dw, mw, StringComparison.Ordinal)));
 
-        return overlapCount >= MinDescriptionOverlapWords
-            ? Math.Max(currentHighest, 0.3)
-            : currentHighest;
+        // 4+ matching words → confident description match (0.5 = high-confidence threshold)
+        // 2–3 matching words → plausible description match (0.4 = above ambiguity floor)
+        // <2 → no description score
+        double score = overlapCount >= 4 ? 0.5
+            : overlapCount >= MinDescriptionOverlapWords ? 0.4
+            : 0.0;
+
+        return Math.Max(currentHighest, score);
     }
 
     // -----------------------------------------------------------------------

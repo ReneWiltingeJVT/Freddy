@@ -9,47 +9,35 @@ using Microsoft.SemanticKernel.ChatCompletion;
 namespace Freddy.Infrastructure.AI;
 
 /// <summary>
-/// Generates conversational responses by combining a knowledge context, matched package content,
-/// and conversation history into a structured LLM prompt. Uses the "chat" model (larger, better reasoning)
-/// rather than the lightweight classifier model.
+/// Generates conversational responses for overview and unmatched queries.
+/// Uses the classifier model (qwen2.5:1.5b) with a slim prompt — matched package
+/// responses are handled by <see cref="PackageResponseFormatter"/> without any LLM call.
 /// </summary>
 public sealed class ChatResponseGenerator(
-    [FromKeyedServices("chat")] IChatCompletionService chatCompletion,
+    [FromKeyedServices("classifier")] IChatCompletionService chatCompletion,
     IOptions<AIOptions> aiOptions,
     ILogger<ChatResponseGenerator> logger) : IChatResponseGenerator
 {
+    // Slim system prompt used only for overview / unmatched queries.
+    // Matched packages take the deterministic PackageResponseFormatter path instead.
     private const string SystemPromptTemplate = """
-        Je bent Freddy, een vriendelijke en behulpzame digitale assistent voor zorgmedewerkers in de thuiszorg.
-        Je helpt medewerkers snel de juiste informatie te vinden over protocollen, werkinstructies en persoonlijke plannen van cliënten.
+        Je bent Freddy, een digitale assistent voor zorgmedewerkers in de thuiszorg.
+        Je beantwoordt overzichtsvragen over beschikbare protocollen, werkinstructies en cliënten.
 
-        ## REGELS — deze zijn strikt en je moet ze altijd volgen:
-        1. Beantwoord vragen UITSLUITEND op basis van de onderstaande informatie. Verzin NIETS.
-        2. Als de informatie het antwoord niet bevat: zeg dat eerlijk en verwijs naar de leidinggevende.
-        3. Verwijs bij inhoudelijke antwoorden altijd naar het bronpakket bij naam (bijv. "Volgens Protocol Agressie...").
-        4. Gebruik eenvoudige, duidelijke taal op B1 niveau.
-        5. Geef NOOIT medisch advies over individuele patiënten. Verwijs naar de arts of leidinggevende.
-        6. Bij twijfel: verwijs door naar de leidinggevende.
-        7. Houd antwoorden bondig maar volledig. Gebruik opsommingen waar dat helpt.
-        8. Als een gebruiker vraagt welke pakketten, protocollen, werkinstructies of cliënten er zijn,
-           gebruik de onderstaande overzichtsinformatie om een compleet antwoord te geven.
-        9. Als een gebruiker een cliëntnaam noemt, gebruik dan de persoonlijke plannen van die cliënt als context.
+        ## REGELS
+        1. Beantwoord uitsluitend op basis van onderstaande kennis. Verzin niets.
+        2. Bevat de kennis het antwoord niet: zeg dat eerlijk en verwijs naar de leidinggevende.
+        3. Gebruik eenvoudige taal op B1 niveau.
+        4. Geef korte, overzichtelijke antwoorden. Gebruik opsommingen waar dat helpt.
+        5. Geef NOOIT medisch advies. Verwijs naar de arts of leidinggevende.
 
-        ## BESCHIKBARE KENNIS
+        ## BESCHIKBARE PAKKETTEN
         {PACKAGE_SUMMARIES}
 
         ## CLIËNTINFORMATIE
         {CLIENT_INFO}
 
         {PERSONAL_PLANS_SECTION}
-
-        {MATCHED_PACKAGE_SECTION}
-        """;
-
-    private const string MatchedPackageSectionTemplate = """
-        ## RELEVANT PAKKET — gebruik dit als primaire bron voor je antwoord
-        Pakket: {TITLE}
-
-        {CONTENT}
         """;
 
     public async Task<ChatResponseResult> GenerateAsync(
@@ -140,18 +128,11 @@ public sealed class ChatResponseGenerator(
     {
         string personalPlansSection = string.IsNullOrWhiteSpace(request.KnowledgeContext.PersonalPlans)
             ? string.Empty
-            : $"## PERSOONLIJKE PLANNEN CLIËNT\n{request.KnowledgeContext.PersonalPlans}";
-
-        string matchedPackageSection = request.MatchedPackageTitle is not null && request.MatchedPackageContent is not null
-            ? MatchedPackageSectionTemplate
-                .Replace("{TITLE}", request.MatchedPackageTitle, StringComparison.Ordinal)
-                .Replace("{CONTENT}", request.MatchedPackageContent, StringComparison.Ordinal)
-            : string.Empty;
+            : $"## PERSOONLIJKE PLANNEN\n{request.KnowledgeContext.PersonalPlans}";
 
         return SystemPromptTemplate
             .Replace("{PACKAGE_SUMMARIES}", request.KnowledgeContext.PackageSummaries, StringComparison.Ordinal)
             .Replace("{CLIENT_INFO}", request.KnowledgeContext.ClientInfo, StringComparison.Ordinal)
-            .Replace("{PERSONAL_PLANS_SECTION}", personalPlansSection, StringComparison.Ordinal)
-            .Replace("{MATCHED_PACKAGE_SECTION}", matchedPackageSection, StringComparison.Ordinal);
+            .Replace("{PERSONAL_PLANS_SECTION}", personalPlansSection, StringComparison.Ordinal);
     }
 }

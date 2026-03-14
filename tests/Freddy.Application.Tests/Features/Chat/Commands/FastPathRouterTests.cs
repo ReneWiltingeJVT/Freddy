@@ -178,9 +178,9 @@ public sealed class FastPathRouterTests
             "Help met het voorbereiden en organiseren",
             [candidate]);
 
-        // Assert — description overlap raised to 0.3 after scoring improvements
+        // Assert — description overlap ≥2 words now returns 0.4 (above ambiguity floor, enabling direct routing)
         results.Should().HaveCount(1);
-        results[0].Score.Should().Be(0.3);
+        results[0].Score.Should().Be(0.4);
     }
 
     [Fact]

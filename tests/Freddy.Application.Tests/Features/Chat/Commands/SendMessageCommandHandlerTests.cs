@@ -18,6 +18,7 @@ public sealed class SendMessageCommandHandlerTests
     private readonly IPackageRouter _packageRouter = Substitute.For<IPackageRouter>();
     private readonly ISmallTalkDetector _smallTalkDetector = Substitute.For<ISmallTalkDetector>();
     private readonly IClientDetector _clientDetector = Substitute.For<IClientDetector>();
+    private readonly IPackageResponseFormatter _packageResponseFormatter = Substitute.For<IPackageResponseFormatter>();
     private readonly IKnowledgeContextBuilder _knowledgeContextBuilder = Substitute.For<IKnowledgeContextBuilder>();
     private readonly IChatResponseGenerator _chatResponseGenerator = Substitute.For<IChatResponseGenerator>();
     private readonly SendMessageCommandHandler _handler;
@@ -33,6 +34,15 @@ public sealed class SendMessageCommandHandlerTests
             .GetNamesByPackageIdsAsync(Arg.Any<IEnumerable<Guid>>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<Guid, List<string>>());
 
+        // Default: formatter produces structured Dutch response from package data
+        _packageResponseFormatter
+            .Format(Arg.Any<Package>())
+            .Returns(callInfo =>
+            {
+                Package p = callInfo.Arg<Package>();
+                return $"Ik heb het volgende pakket gevonden:\n\n**{p.Title}**\n\n{p.Description}\n\n{p.Content}".TrimEnd();
+            });
+
         // Default: knowledge context returns minimal context
         _knowledgeContextBuilder
             .BuildAsync(Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
@@ -43,17 +53,13 @@ public sealed class SendMessageCommandHandlerTests
             .GetRecentMessagesAsync(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns([]);
 
-        // Default: LLM generates a response based on matched package
+        // Default: LLM generates a response only for no-match / overview queries (matched packages use the formatter)
         _chatResponseGenerator
             .GenerateAsync(Arg.Any<ChatResponseRequest>(), Arg.Any<CancellationToken>())
-            .Returns(callInfo =>
-            {
-                ChatResponseRequest req = callInfo.Arg<ChatResponseRequest>();
-                string content = req.MatchedPackageTitle is not null
-                    ? $"Volgens **{req.MatchedPackageTitle}**: {req.MatchedPackageContent}"
-                    : "Sorry, ik kon geen passend antwoord vinden op je vraag.";
-                return new ChatResponseResult(content, req.MatchedPackageTitle, req.MatchedPackageTitle is not null);
-            });
+            .Returns(new ChatResponseResult(
+                "Sorry, ik kon geen passend antwoord vinden op je vraag.",
+                null,
+                false));
 
         _handler = new SendMessageCommandHandler(
             _conversationRepository,
@@ -62,6 +68,7 @@ public sealed class SendMessageCommandHandlerTests
             _packageRouter,
             _smallTalkDetector,
             _clientDetector,
+            _packageResponseFormatter,
             _knowledgeContextBuilder,
             _chatResponseGenerator,
             NullLogger<SendMessageCommandHandler>.Instance);
