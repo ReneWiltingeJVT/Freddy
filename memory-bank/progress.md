@@ -134,6 +134,17 @@
 ## Known Issues
 
 - Edge case: "wat is het protocol als ik beschikbaar ben?" triggers `ExistencePattern` + `isProtocol` → false ListByCategory. Low risk in practice.
+- Frontend dev servers (`Freddy.Web`, `Freddy.Backoffice`) exit with code 1 — likely need `npm install`
+
+## Phase 14 — MVP Retrieval Stabilization (COMPLETE)
+
+- **Root cause fixed:** `llama3.1:8b` (30s timeout) was called on every matched-package response
+- **`PackageResponseFormatter`**: deterministic Dutch formatter, <5ms, no LLM, no I/O
+- **`SendMessageCommandHandler`**: matched packages → formatter only; no-match → qwen2.5:1.5b
+- **`ChatResponseGenerator`**: switched to `qwen2.5:1.5b` (keyed: "classifier"), slim prompt
+- **`FastPathRouter.ScoreDescription`**: always runs, score 0.4/0.5 (was 0.3 last-resort)
+- **`AIOptions`**: `TimeoutSeconds` 30→8, `MaxTokens` 1024→512
+- 153 tests green, branch `feature/mvp-retrieval-stabilization`
 
 ## What's Left to Build
 

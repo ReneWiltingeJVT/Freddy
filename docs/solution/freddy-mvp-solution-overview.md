@@ -147,7 +147,8 @@ organisatie zelf is opgesteld.
 ## 5. Hoe werkt de slimme routing?
 
 Routing is het proces waarbij Freddy bepaalt welk pakket het beste aansluit bij de vraag van
-de medewerker. Dit wordt gedaan via een drielaagsysteem.
+de medewerker. Dit verloopt volledig deterministisch — de LLM staat nooit in het kritieke
+pad van pakketophaling.
 
 ```mermaid
 flowchart LR
@@ -159,15 +160,18 @@ flowchart LR
     subgraph Analyse[Routingproces]
         direction TB
         FP[Fast-path\nDeterministisch\n< 10 ms]
-        LLM[Lightweight AI-router\nAlleen bij twijfel\n< 1,5 s]
+        FMT[PackageResponseFormatter\nGeen LLM\n< 5 ms]
+        LLM[Overzichts-AI\nAlleen zonder match\n< 8 s]
+        FP -->|Hoge zekerheid ≥ 60%| FMT
+        FP -->|Matige zekerheid 30–60%| BevestigingInternal[Bevestigingsvraag]
+        FP -->|Meerdere kandidaten| OllamaRouter[Classifier LLM\n< 8 s]
+        OllamaRouter --> FMT
+        FP -->|Geen match| LLM
     end
 
-    FP -->|Hoge zekerheid ≥ 60%| Antwoord[Antwoord tonen]
-    FP -->|Matige zekerheid 30–60%| Bevestiging[Bevestigingsvraag]
-    FP -->|Meerdere kandidaten| LLM
+    FMT --> Antwoord[Antwoord tonen]
     LLM --> Antwoord
-    FP -->|Geen match < 30%| Fallback[Ik weet het niet]
-    Bevestiging -->|Bevestigd| Antwoord
+    BevestigingInternal -->|Bevestigd| FMT
 ```
 
 **Small talk — de menselijke laag:**
@@ -182,29 +186,34 @@ Dit maakt Freddy menselijk en toegankelijk. Een chatassistent die "Hoi" beantwoo
 
 **Fast-path — de snelle route:**
 
-De fast-path vergelijkt de vraag van de medewerker met titels, trefwoorden en synoniemen van
-alle gepubliceerde pakketten. Dit is volledig deterministisch — geen AI, geen kans op
-onverwachte uitkomsten. Resultaat in minder dan tien milliseconden. De overgrote meerderheid
-van alle vragen wordt via deze route beantwoord.
+De fast-path vergelijkt de vraag van de medewerker met titels, trefwoorden, synoniemen én
+beschrijvingen van alle gepubliceerde pakketten. Dit is volledig deterministisch — geen AI,
+geen kans op onverwachte uitkomsten. Resultaat in minder dan tien milliseconden.
 
-**Slow-path — alleen bij echte twijfel:**
+**PackageResponseFormatter — geen LLM voor pakketantwoorden:**
 
-Wanneer meerdere pakketten een vergelijkbare score hebben en de fast-path geen duidelijke
-winnaar kan aanwijzen, wordt een lichtgewicht taalmodel ingezet. Dit model is specifiek
-gekozen voor snelheid: het heeft 1,5 miljard parameters (in plaats van de gebruikelijke 7
-miljard), waardoor het classificatieresultaat binnen 1,5 seconde beschikbaar is — zelfs
-zonder GPU.
+Wanneer een pakket met voldoende zekerheid gevonden is, formatteert Freddy het antwoord
+deterministisch — zonder enige LLM-aanroep. De volledige inhoud van het pakket (titel,
+beschrijving, stappen) wordt direct gestructureerd weergegeven in minder dan 5 milliseconden.
 
-**Belangrijk:** het model genereert geen antwoord. Het kiest alleen welk pakket het beste
-past uit een voorgeselecteerde lijst. Alle tekst die de gebruiker ziet komt uit het pakket
-zelf, beheerd door de backoffice.
+**Classifier LLM — alleen bij echte twijfel over welk pakket:**
+
+Wanneer meerdere pakketten een vergelijkbare score hebben, wordt een lichtgewicht taalmodel
+(`qwen2.5:1.5b`) ingezet om te kiezen. Dit model genereert **geen antwoord** — het kiest
+alleen welk pakket het beste past.
+
+**Overzichts-AI — alleen zonder pakketmatch:**
+
+Voor vragen als "hoeveel protocollen zijn er?" of vragen die geen specifiek pakket treffen,
+gebruikt Freddy hetzelfde lichtgewicht model om een overzichtsantwoord te formuleren op
+basis van de pakket-titels en beschrijvingen. Timeout: 8 seconden.
 
 **Waarom dit beter werkt dan alles door de AI laten lopen:**
 
 - Small talk wordt **direct** beantwoord — geen AI nodig, geen wachttijd
 - De fast-path is **deterministische logica** — altijd hetzelfde resultaat bij dezelfde invoer
-- De slow-path (AI) wordt alleen gebruikt wanneer het echt nodig is, met een klein en snel
-  model
+- **Pakketantwoorden** worden zonder LLM geformateerd — < 500ms totaaltijd
+- De AI wordt alleen gebruikt wanneer het echt nodig is (twijfel of overzicht)
 - Dit maakt het systeem **voorspelbaar, auditeerbaar en controleerbaar**
 - Geschikt voor een zorgomgeving waar transparantie vereist is
 

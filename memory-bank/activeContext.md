@@ -2,7 +2,71 @@
 
 ## Current Work Focus
 
-Phase 13 (Retrieval Improvements) — implementation complete and pushed on branch `feature/freddy-retrieval-improvement`. Follow-up fix (`fix: detect existence queries`) also committed. All tests passing (153 total). Ready for PR review.
+Phase 14 (MVP Retrieval Stabilization) — implementation complete and pushed on branch `feature/mvp-retrieval-stabilization`.
+153 tests passing. Ready for PR review.
+
+## Recent Changes (Phase 14 — MVP Retrieval Stabilization)
+
+### Root cause fixed
+
+`llama3.1:8b` (30s timeout) was called on every matched-package response, causing consistent timeouts.
+`KnowledgeContextBuilder` injected all 30–40 packages into the system prompt even when the package was already found.
+`FastPathRouter.ScoreDescription()` only ran as last resort (guarded by `score < 0.3`).
+
+### New component: `PackageResponseFormatter`
+
+- **`IPackageResponseFormatter`** (Application layer): `string Format(Package package)`
+- **`PackageResponseFormatter`** (Infrastructure layer): formats title + description + content as Dutch response, no I/O, <5ms
+- Registered as `AddSingleton<IPackageResponseFormatter, PackageResponseFormatter>()` in DI
+
+### `SendMessageCommandHandler` refactored
+
+- Matched package path: → `PackageResponseFormatter.Format()` + `AppendDocumentOfferAsync()` — **no LLM**
+- No-match/overview path: → `KnowledgeContextBuilder` + `ChatResponseGenerator` (unchanged, now slimmer)
+- `DeliverPackageWithLlmAsync` renamed to `DeliverPackageAsync`, uses formatter
+- Constructor: added `IPackageResponseFormatter` between `IClientDetector` and `IKnowledgeContextBuilder`
+
+### `ChatResponseGenerator` refactored
+
+- Switched from `[FromKeyedServices("chat")]` (`llama3.1:8b`) → `[FromKeyedServices("classifier")]` (`qwen2.5:1.5b`)
+- System prompt slimmed: removed `{MATCHED_PACKAGE_SECTION}` and `MatchedPackageSectionTemplate` const
+- `BuildSystemPrompt` simplified — no matched package handling
+- Personal plans section kept for client-context overview queries
+
+### `FastPathRouter` description scoring improved
+
+- Removed `if (highestScore < 0.3)` guard — description always scored
+- `ScoreDescription`: ≥4 words → 0.5, ≥2 words → 0.4 (was 0.3 last-resort)
+- Effect: description-only matches now route directly without LLM disambiguation
+
+### `AIOptions` / appsettings.json
+
+- `TimeoutSeconds`: 30 → **8** (qwen2.5:1.5b responds in 3–6s)
+- `MaxTokens`: 1024 → **512**
+
+### Test update
+
+- `SendMessageCommandHandlerTests`: added `IPackageResponseFormatter` mock, simplified `_chatResponseGenerator` default
+- `FastPathRouterTests.Score_DescriptionOverlap_Returns02`: assertion updated 0.3 → 0.4
+
+## Commits on `feature/mvp-retrieval-stabilization`
+
+- `1a9255a` — `feat: add PackageResponseFormatter — deterministic package response, no LLM required`
+- `6daeb4e` — `fix: MVP retrieval stabilization — remove llama3.1:8b from critical path`
+
+## Performance after fix
+
+| Scenario | Before | After |
+|---|---|---|
+| Pakketvraag (high-confidence) | ~30s timeout | < 500ms |
+| Overzichtsvraag | ~30s timeout | < 8s |
+
+## Next Steps
+
+- PR review voor `feature/mvp-retrieval-stabilization`
+- User testing op de gevonden query: "ik heb een vraag over de voedselbank"
+- Frontend npm install / dev server troubleshooting (Exit Code 1 bij beide apps)
+- Optioneel: Conversational tone in formatter (strategy pattern via `IChatResponseFormatter`)
 
 ## Recent Changes (Post-Phase 13 — Existence Query Fix)
 
